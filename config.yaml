@@ -1,0 +1,26 @@
+cookie:
+  name: beu_dashboard_cookie
+  key: a_long_random_signature_string_123
+  expiry_days: 30
+credentials:
+  usernames:
+    biniyam0928@gmail.com:
+      email: biniyam0928@gmail.com
+      failed_login_attempts: 0 # Will be managed automatically
+      first_name: Biniyam
+      last_name: Girma
+      logged_in: False # Will be managed automatically
+      password: 091625 # Will be hashed automatically
+      roles: # Optional
+      - admin
+      - editor
+      - viewer
+    test@gmail.com:
+      email: test@gmail.com
+      failed_login_attempts: 0 # Will be managed automatically
+      first_name: Rebecca
+      last_name: Briggs
+      logged_in: False # Will be managed automatically
+      password: def # Will be hashed automatically
+      roles: # Optional
+      - viewer

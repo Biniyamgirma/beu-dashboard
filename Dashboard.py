@@ -8,14 +8,14 @@ import streamlit_authenticator as stauth
 import pandas as pd 
 import numpy as np
 import datetime as dt
+import plotly.express as px
 import plotly.figure_factory as ff
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 from data_fetcher import (
-    fetch_data_all_delivered
+    fetch_data_all_delivered,
+    CSV_PATH,
 )
-
-
 
 with open(CONFIG_PATH) as file:
     config = yaml.load(file, Loader=SafeLoader)
@@ -51,24 +51,17 @@ def restaurant_bd_map():
 
 @st.cache_data
 def load_data():
-    result_df = fetch_data_all_delivered()
-    if not result_df.empty:
-        df = pd.DataFrame({
-            "Order ID": result_df['ORDERS'],
-            "Restaurant name": result_df['Restaurant name'],
-            "created_at":result_df['created_at'],
-            "coupon_discount_amount": result_df['coupon_discount_amount'],
-            "restaurant_discount": result_df['restaurant_discount'],
-            "restaurant_discount_on_food": result_df['restaurant_discount_on_food'],
-            "beu_discount": result_df['beu_discount'],
-            "beu_discount_on_food": result_df['beu_discount_on_food'],
-            "restaurant_fee": result_df['restaurant_fee'],
-            "commission_value": result_df['commission_value'],
-            "categories_name": result_df['Categories_Name'],
-            "team": result_df['Team'],
-        })
-    return df
+    if os.path.exists(CSV_PATH):
+        df = pd.read_csv(CSV_PATH, parse_dates=["created_at"])
+    else:
+        df = fetch_data_all_delivered()
 
+    if df.empty:
+        return df
+
+    df["created_at"] = pd.to_datetime(df["created_at"])
+    df["Date"] = df["created_at"].dt.date
+    return df
 
 
 @st.cache_data
@@ -89,6 +82,43 @@ def fetch_restaurant_data_live():
     
     seed = np.random.randint(0, 1_000_000)
     return load_restaurant_data.__wrapped__(seed=seed)
+
+
+def get_user_info_from_config():
+    username = st.session_state.get("username") or st.session_state.get("name")
+    if not username:
+        return None, [], None
+
+    credentials = config.get("credentials", {}).get("usernames", {})
+    user_info = credentials.get(username)
+
+    if user_info is None:
+        for key, info in credentials.items():
+            full_name = f"{info.get('first_name', '').strip()} {info.get('last_name', '').strip()}".strip()
+            if username == key or username == info.get('email') or username == full_name:
+                user_info = info
+                username = key
+                break
+
+    if user_info is None:
+        return username, [], None
+
+    roles = user_info.get("roles", [])
+    if isinstance(roles, str):
+        roles = [roles]
+
+    full_name = f"{user_info.get('first_name', '').strip()} {user_info.get('last_name', '').strip()}".strip()
+    return username, roles, full_name
+
+
+def safe_max_int(series):
+    try:
+        value = series.max()
+        if pd.isna(value):
+            return 0
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
 
 
 def show_bar_table(df, group_col, value_col, title, show_rank=True):
@@ -119,7 +149,7 @@ def show_bar_table(df, group_col, value_col, title, show_rank=True):
                 value_col,
                 format="%.0f",
                 min_value=0,
-                max_value=float(agg[value_col].max()),
+                max_value=safe_max_int(agg[value_col]),
             ),
         },
     )
@@ -135,15 +165,40 @@ if st.session_state.get("authentication_status"):
     st.sidebar.write(f'Welcome *{st.session_state["name"]}*')
     category = st.sidebar.radio(
         "Select Category:",
-        ["ALL Delivered", "Restaurant BD Performance", "Call Center", "Area Manager",
-         "Payment issues", "Dashboard", "Marketing", "Customer Support"]
+        ["ALL Delivered", "new"]
     )
 
     if category == "ALL Delivered":
         st.subheader("ALL Delivered")
+
+        if st.sidebar.button("Refresh delivered data"):
+            st.cache_data.clear()
+            fetch_data_all_delivered()
+            st.success("Fetched latest 3-month data and updated CSV.")
+            st.rerun()
+
         df = load_data()
 
-        # --- Date range picker ---
+        if df.empty:
+            st.warning("No delivery data available. Use Refresh delivered data to fetch a fresh dataset.")
+            
+
+        username, roles, user_full_name = get_user_info_from_config()
+        is_admin = "admin" in [role.lower() for role in roles]
+        is_viewer = not is_admin and "viewer" in [role.lower() for role in roles]
+
+        if is_viewer and user_full_name:
+            st.sidebar.markdown(f"**Role:** Viewer")
+            st.sidebar.markdown(f"**BD Name:** {user_full_name}")
+            df = df[df["BD NAME"] == user_full_name]
+            if df.empty:
+                st.warning(f"No data available for BD Name '{user_full_name}'.")
+                
+        elif is_admin:
+            st.sidebar.markdown("**Role:** Admin")
+        else:
+            st.sidebar.markdown("**Role:** Unknown")
+
         min_date = df["Date"].min()
         max_date = df["Date"].max()
 
@@ -159,52 +214,60 @@ if st.session_state.get("authentication_status"):
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-            city = st.selectbox("City", ["All"] + sorted(df["City"].unique().tolist()))
+            restaurant = st.selectbox(
+                "Restaurant",
+                ["All"] + sorted(df["Restaurant name"].dropna().unique().tolist()),
+            )
 
         with col2:
-            status = st.selectbox("Status", ["All"] + sorted(df["Status"].unique().tolist()))
+            bd_name = st.selectbox(
+                "BD Name",
+                ["All"] + sorted(df["BD NAME"].dropna().unique().tolist()),
+            )
 
         with col3:
-            driver = st.selectbox("Driver", ["All"] + sorted(df["Driver"].unique().tolist()))
+            team = st.selectbox(
+                "Team",
+                ["All"] + sorted(df["Team"].dropna().unique().tolist()),
+            )
 
         with col4:
-            amount = st.selectbox("Amount", ["All"] + sorted(df["Amount"].unique().tolist()))
+            category_name = st.selectbox(
+                "Category",
+                ["All"] + sorted(df["Categories_Name"].dropna().unique().tolist()),
+            )
 
         filtered_df = df.copy()
 
-        if city != "All":
-            filtered_df = filtered_df[filtered_df["City"] == city]
+        if restaurant != "All":
+            filtered_df = filtered_df[filtered_df["Restaurant name"] == restaurant]
 
-        if status != "All":
-            filtered_df = filtered_df[filtered_df["Status"] == status]
+        if bd_name != "All":
+            filtered_df = filtered_df[filtered_df["BD NAME"] == bd_name]
 
-        if driver != "All":
-            filtered_df = filtered_df[filtered_df["Driver"] == driver]
+        if team != "All":
+            filtered_df = filtered_df[filtered_df["Team"] == team]
 
-        if amount != "All":
-            filtered_df = filtered_df[filtered_df["Amount"] == amount]
+        if category_name != "All":
+            filtered_df = filtered_df[filtered_df["Categories_Name"] == category_name]
 
         if len(date_range) == 2:
             start_date, end_date = date_range
             filtered_df = filtered_df[
-                (filtered_df["Date"] >= pd.to_datetime(start_date)) &
-                (filtered_df["Date"] <= pd.to_datetime(end_date))
+                (filtered_df["Date"] >= start_date) &
+                (filtered_df["Date"] <= end_date)
             ]
-        # if the user has only picked the start date so far, keep showing
-        # whatever the other filters already produced (no reset to full df)
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Total Orders", len(filtered_df))
-        m2.metric("Total Revenue", f"{filtered_df['Amount'].sum():,.2f} ETB")
-        m3.metric("Restaurant fee", f"2200000")
+        m2.metric("Commission Value", f"{filtered_df['commission_value'].sum():,.2f} ETB")
+        m3.metric("Restaurant Fee", f"{filtered_df['restaurant_fee'].sum():,.2f} ETB")
 
-        m1.metric("Restaurant Discount", '3000')
-        m2.metric("Restaurant Discount On Food", "40000")
-        m3.metric("Commission Value", f"2200000")
+        m1.metric("Restaurant Discount", f"{filtered_df['restaurant_discount'].sum():,.2f} ETB")
+        m2.metric("beU Discount", f"{filtered_df['beu_discount'].sum():,.2f} ETB")
+        m3.metric("beU Discount On Food", f"{filtered_df['beu_discount_on_food'].sum():,.2f} ETB")
 
-        m1.metric("beu Discount", '3000')
-        m2.metric("beu Discount On Food", "40000")
-        m3.metric("Coupon Discount Amount", f"2200000")
+        st.metric("Coupon Discount Amount", f"{filtered_df['coupon_discount_amount'].sum():,.2f} ETB")
 
         
         chart_col1, chart_col2 = st.columns(2)
@@ -229,16 +292,15 @@ if st.session_state.get("authentication_status"):
 
         st.title("Restaurant BD Performance")
 
-        update_online = st.checkbox(
-            "Update graph online",
-            help="Tick this to pull fresh data instead of the cached snapshot."
+        rest_df = (
+            filtered_df.groupby(["Restaurant name", "BD NAME"], as_index=False)
+            .agg(
+                commission_value=("commission_value", "sum"),
+                beu_discount_on_food=("beu_discount_on_food", "sum"),
+                order_count=("ORDERS", "nunique"),
+            )
+            .sort_values("commission_value", ascending=False)
         )
-        if update_online:
-            rest_df = fetch_restaurant_data_live()
-            st.caption("Showing live data (refreshes each time you reload).")
-        else:
-            rest_df = load_restaurant_data()
-            st.caption("Showing cached data.")
 
         st.dataframe(
             rest_df,
@@ -251,23 +313,23 @@ if st.session_state.get("authentication_status"):
                     "commission_value",
                     format="%d",
                     min_value=0,
-                    max_value=int(rest_df["commission_value"].max()),
+                    max_value=safe_max_int(rest_df["commission_value"]),
                 ),
-                "ORDERS": st.column_config.ProgressColumn(
-                    "ORDERS",
+                "beu_discount_on_food": st.column_config.ProgressColumn(
+                    "beu_discount_on_food",
                     format="%d",
                     min_value=0,
-                    max_value=int(rest_df["ORDERS"].max()),
+                    max_value=safe_max_int(rest_df["beu_discount_on_food"]),
+                ),
+                "order_count": st.column_config.ProgressColumn(
+                    "order_count",
+                    format="%d",
+                    min_value=0,
+                    max_value=safe_max_int(rest_df["order_count"]),
                 ),
             },
         )
 
-        if update_online:
-            if st.button("Refresh now"):
-                st.cache_data.clear()
-                st.rerun()
-
-      
         show_bar_table(
             filtered_df,
             group_col="BD NAME",
@@ -276,18 +338,30 @@ if st.session_state.get("authentication_status"):
             show_rank=True,
         )
 
-        hist_data = [
-            rng(0).standard_normal(200) - 2,
-            rng(1).standard_normal(200),
-            rng(2).standard_normal(200) + 2,
-        ]
-        group_labels = ["Group 1", "Group 2", "Group 3"]
+        if not filtered_df.empty:
+            team_commission = (
+                filtered_df.groupby(["Date", "Team"], as_index=False)
+                ["commission_value"]
+                .sum()
+                .sort_values(["Team", "Date"])
+            )
 
-        fig = ff.create_distplot(
-            hist_data, group_labels, bin_size=[0.1, 0.25, 0.5]
-        )
-
-        st.plotly_chart(fig)
+            fig = px.line(
+                team_commission,
+                x="Date",
+                y="commission_value",
+                color="Team",
+                markers=True,
+                title="Team Commission Performance",
+                labels={
+                    "commission_value": "Commission Value (ETB)",
+                    "Date": "Date",
+                },
+            )
+            fig.update_layout(hovermode="x unified")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No team commission data available for the current filters.")
     # ---- your other categories (Call Center, Area Manager, etc.) go here ----
 
 elif st.session_state.get("authentication_status") is False:

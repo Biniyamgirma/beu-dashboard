@@ -9,8 +9,14 @@ def create_db_engine():
     port = 3306
     database = "beu"
 
-    connection_string = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}"
+    connection_string = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
 
-    engine = create_engine(connection_string)
+    engine = create_engine(
+        connection_string,
+        connect_args={
+            "charset": "utf8mb4",
+            "use_unicode": True,
+        },
+    )
 
     return engine

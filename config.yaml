@@ -18,9 +18,20 @@ credentials:
     test@gmail.com:
       email: test@gmail.com
       failed_login_attempts: 0 # Will be managed automatically
-      first_name: Rebecca
+      first_name: Rebecca 
       last_name: Briggs
       logged_in: False # Will be managed automatically
       password: def # Will be hashed automatically
       roles: # Optional
+      - viewer
+    mosesteshomework@gmail.com:
+      email: mosesteshomework@gmail.com
+      failed_login_attempts: 0 # Will be managed automatically
+      first_name: Moses
+      last_name: TeShome
+      logged_in: False # Will be managed automatically
+      password: admin123 # Will be hashed automatically
+      roles: # Optional
+      - admin
+      - editor
       - viewer

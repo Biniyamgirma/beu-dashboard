@@ -15,8 +15,10 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 from data_fetcher import (
     fetch_data_all_delivered,
     fetch_data_all_sales,
+    fetch_data_all_cancellations,
     CSV_PATH,
     SALES_CSV_PATH,
+    CANCELLATIONS_CSV_PATH,
 )
 
 with open(CONFIG_PATH) as file:
@@ -88,6 +90,34 @@ def load_sales_data():
     df["order_status"] = df["order_status"].astype(str).fillna("")
     df["price"] = pd.to_numeric(df["price"], errors="coerce").fillna(0)
     df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
+
+    return df
+
+
+@st.cache_data
+def load_cancellations_data():
+    if os.path.exists(CANCELLATIONS_CSV_PATH):
+        df = pd.read_csv(CANCELLATIONS_CSV_PATH, parse_dates=["created_at"])
+    else:
+        df = fetch_data_all_cancellations()
+
+    if df.empty:
+        return df
+
+    df["created_at"] = pd.to_datetime(df["created_at"])
+    df["Date"] = df["created_at"].dt.date
+    df["Time"] = df["created_at"].dt.time
+    df["cancel_time"] = pd.to_numeric(df["cancel_time"], errors="coerce").fillna(0)
+    df["unit_price"] = pd.to_numeric(df["unit_price"], errors="coerce").fillna(0)
+    df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
+    df["order_amount"] = pd.to_numeric(df["order_amount"], errors="coerce").fillna(0)
+
+    df["restaurant_name"] = df["restaurant_name"].astype(str).fillna("")
+    df["product"] = df["product"].astype(str).fillna("")
+    df["cancellation_reason"] = df["cancellation_reason"].astype(str).fillna("")
+    df["BD"] = df["BD"].astype(str).fillna("")
+    df["team"] = df["team"].astype(str).fillna("")
+    df["category"] = df["category"].astype(str).fillna("")
 
     return df
 
@@ -193,22 +223,23 @@ if st.session_state.get("authentication_status"):
     st.sidebar.write(f'Welcome *{st.session_state["name"]}*')
     category = st.sidebar.radio(
         "Select Category:",
-        ["ALL Delivered", "All Sales"]
+        ["ALL Delivered", "All Sales", "All Cancellations"]
     )
 
     if category == "ALL Delivered":
         st.subheader("ALL Delivered")
 
-        if st.sidebar.button("Refresh delivered data"):
+        if st.sidebar.button("Refresh delivered and sales data"):
             st.cache_data.clear()
             fetch_data_all_delivered()
-            st.success("Fetched latest 3-month data and updated CSV.")
+            fetch_data_all_sales()
+            st.success("Fetched latest 2-month data and updated delivered_data.csv and sales_data.csv.")
             st.rerun()
 
         df = load_data()
 
         if df.empty:
-            st.warning("No delivery data available. Use Refresh delivered data to fetch a fresh dataset.")
+            st.warning("No delivery data available. Use Refresh delivered and sales data to fetch a fresh dataset.")
             
 
         username, roles, user_full_name = get_user_info_from_config()
@@ -248,9 +279,22 @@ if st.session_state.get("authentication_status"):
             )
 
         with col2:
+            bd_options = ["All"] + sorted(df["BD NAME"].dropna().unique().tolist())
+            # If viewer, ensure their name appears and is auto-selected
+            if is_viewer and user_full_name:
+                if user_full_name not in bd_options:
+                    bd_options = [user_full_name] + bd_options
+                try:
+                    bd_index = bd_options.index(user_full_name)
+                except ValueError:
+                    bd_index = 0
+            else:
+                bd_index = 0
+
             bd_name = st.selectbox(
                 "BD Name",
-                ["All"] + sorted(df["BD NAME"].dropna().unique().tolist()),
+                bd_options,
+                index=bd_index,
             )
 
         with col3:
@@ -391,15 +435,16 @@ if st.session_state.get("authentication_status"):
     elif category == "All Sales":
         st.subheader("All Sales")
 
-        if st.sidebar.button("Refresh sales data"):
+        if st.sidebar.button("Refresh delivered and sales data"):
             st.cache_data.clear()
+            fetch_data_all_delivered()
             fetch_data_all_sales()
-            st.success("Fetched latest sales data and updated CSV.")
+            st.success("Fetched latest 2-month data and updated delivered_data.csv and sales_data.csv.")
             st.rerun()
 
         sales_df = load_sales_data()
         if sales_df.empty:
-            st.warning("No sales data available. Use Refresh sales data to fetch a fresh dataset.")
+            st.warning("No sales data available. Use Refresh delivered and sales data to fetch a fresh dataset.")
 
         username, roles, user_full_name = get_user_info_from_config()
         is_admin = "admin" in [role.lower() for role in roles]
@@ -442,9 +487,21 @@ if st.session_state.get("authentication_status"):
                 ["All"] + sorted(sales_df["Restaurant name"].dropna().unique().tolist()),
             )
         with filter_col2:
+            bd_options = ["All"] + sorted(sales_df["bd_name"].dropna().unique().tolist())
+            if is_viewer and user_full_name:
+                if user_full_name not in bd_options:
+                    bd_options = [user_full_name] + bd_options
+                try:
+                    bd_index = bd_options.index(user_full_name)
+                except ValueError:
+                    bd_index = 0
+            else:
+                bd_index = 0
+
             bd_name = st.selectbox(
                 "BD Name",
-                ["All"] + sorted(sales_df["bd_name"].dropna().unique().tolist()),
+                bd_options,
+                index=bd_index,
             )
         with filter_col3:
             order_status = st.selectbox(
@@ -651,6 +708,195 @@ if st.session_state.get("authentication_status"):
                 filtered_sales.sort_values("created_at", ascending=False)[display_columns],
                 use_container_width=True,
             )
+
+    elif category == "All Cancellations":
+        st.subheader("All Cancellations")
+
+        if st.sidebar.button("Refresh cancellations data"):
+            st.cache_data.clear()
+            fetch_data_all_cancellations()
+            st.success("Fetched latest 2-month cancellation data and updated cancellations_data.csv.")
+            st.rerun()
+
+        cancel_df = load_cancellations_data()
+        if cancel_df.empty:
+            st.warning("No cancellation data available. Use Refresh cancellations data to fetch a fresh dataset.")
+
+        username, roles, user_full_name = get_user_info_from_config()
+        is_admin = "admin" in [role.lower() for role in roles]
+        is_viewer = not is_admin and "viewer" in [role.lower() for role in roles]
+
+        if is_viewer and user_full_name:
+            st.sidebar.markdown(f"**Role:** Viewer")
+            st.sidebar.markdown(f"**BD Name:** {user_full_name}")
+            cancel_df = cancel_df[cancel_df["BD"] == user_full_name]
+            if cancel_df.empty:
+                st.warning(f"No data available for BD Name '{user_full_name}'.")
+        elif is_admin:
+            st.sidebar.markdown("**Role:** Admin")
+        else:
+            st.sidebar.markdown("**Role:** Unknown")
+
+        min_date = cancel_df["Date"].min()
+        max_date = cancel_df["Date"].max()
+
+        st.title("beU Cancellation Dashboard")
+        date_range = st.date_input(
+            "Select Date Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+        )
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            restaurant = st.selectbox(
+                "Restaurant",
+                ["All"] + sorted(cancel_df["restaurant_name"].dropna().unique().tolist()),
+            )
+        with col2:
+            bd_options = ["All"] + sorted(cancel_df["BD"].dropna().unique().tolist())
+            if is_viewer and user_full_name:
+                if user_full_name not in bd_options:
+                    bd_options = [user_full_name] + bd_options
+                try:
+                    bd_index = bd_options.index(user_full_name)
+                except ValueError:
+                    bd_index = 0
+            else:
+                bd_index = 0
+
+            bd_name = st.selectbox(
+                "BD Name",
+                bd_options,
+                index=bd_index,
+            )
+        with col3:
+            team = st.selectbox(
+                "Team",
+                ["All"] + sorted(cancel_df["team"].dropna().unique().tolist()),
+            )
+        with col4:
+            category_name = st.selectbox(
+                "Category",
+                ["All"] + sorted(cancel_df["category"].dropna().unique().tolist()),
+            )
+
+        search_col1, search_col2 = st.columns(2)
+        with search_col1:
+            reason_search = st.text_input(
+                "Search by restaurant, product, BD, or cancellation reason",
+                value="",
+            )
+        with search_col2:
+            amount_min = float(cancel_df["order_amount"].min())
+            amount_max = float(cancel_df["order_amount"].max())
+            amount_range = st.slider(
+                "Order Amount Range",
+                min_value=amount_min,
+                max_value=amount_max,
+                value=(amount_min, amount_max),
+                step=max(1.0, (amount_max - amount_min) / 100),
+                format="%.2f",
+            )
+
+        filtered_cancel_df = cancel_df.copy()
+        if restaurant != "All":
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["restaurant_name"] == restaurant]
+        if bd_name != "All":
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["BD"] == bd_name]
+        if team != "All":
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["team"] == team]
+        if category_name != "All":
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["category"] == category_name]
+
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+            filtered_cancel_df = filtered_cancel_df[
+                (filtered_cancel_df["Date"] >= start_date) &
+                (filtered_cancel_df["Date"] <= end_date)
+            ]
+
+        if reason_search:
+            search_lower = reason_search.strip().lower()
+            filtered_cancel_df = filtered_cancel_df[
+                filtered_cancel_df["restaurant_name"].str.lower().str.contains(search_lower, na=False) |
+                filtered_cancel_df["product"].str.lower().str.contains(search_lower, na=False) |
+                filtered_cancel_df["cancellation_reason"].str.lower().str.contains(search_lower, na=False) |
+                filtered_cancel_df["BD"].str.lower().str.contains(search_lower, na=False)
+            ]
+
+        filtered_cancel_df = filtered_cancel_df[
+            (filtered_cancel_df["order_amount"] >= amount_range[0]) &
+            (filtered_cancel_df["order_amount"] <= amount_range[1])
+        ]
+
+        summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
+        summary_col1.metric("Rows", len(filtered_cancel_df))
+        summary_col2.metric("Total Order Amount", f"{filtered_cancel_df['order_amount'].sum():,.2f} ETB")
+        summary_col3.metric("Avg Cancel Time", f"{filtered_cancel_df['cancel_time'].mean():.1f} mins")
+        summary_col4.metric("Unique Products", filtered_cancel_df['product'].nunique())
+
+        if filtered_cancel_df.empty:
+            st.info("No cancellation data matches the selected filters.")
+        else:
+            chart_col1, chart_col2 = st.columns(2)
+            with chart_col1:
+                reason_summary = (
+                    filtered_cancel_df.groupby("cancellation_reason", as_index=False)["id"]
+                    .count()
+                    .rename(columns={"id": "count"})
+                    .sort_values("count", ascending=False)
+                )
+                fig_reason = px.bar(
+                    reason_summary,
+                    x="count",
+                    y="cancellation_reason",
+                    orientation="h",
+                    title="Cancellation Reason Counts",
+                    labels={"count": "Count", "cancellation_reason": "Reason"},
+                )
+                st.plotly_chart(fig_reason, use_container_width=True)
+
+            with chart_col2:
+                team_summary = (
+                    filtered_cancel_df.groupby("team", as_index=False)["id"]
+                    .count()
+                    .rename(columns={"id": "count"})
+                )
+                fig_team = px.pie(
+                    team_summary,
+                    names="team",
+                    values="count",
+                    title="Cancellations by Team",
+                )
+                st.plotly_chart(fig_team, use_container_width=True)
+
+            st.subheader("Cancellation Details")
+            display_columns = [
+                "id",
+                "created_at",
+                "Date",
+                "Time",
+                "restaurant_name",
+                "product",
+                "unit_price",
+                "quantity",
+                "delivery_charge",
+                "order_amount",
+                "cancellation_reason",
+                "order_status",
+                "BD",
+                "team",
+                "cancel_time",
+                "category",
+            ]
+            display_columns = [col for col in display_columns if col in filtered_cancel_df.columns]
+            st.dataframe(
+                filtered_cancel_df.sort_values("created_at", ascending=False)[display_columns],
+                use_container_width=True,
+            )
+
     # ---- your other categories (Call Center, Area Manager, etc.) go here ----
 
 elif st.session_state.get("authentication_status") is False:

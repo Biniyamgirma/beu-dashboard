@@ -8,6 +8,7 @@ from db_connection import create_db_engine
 
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'delivered_data.csv')
 SALES_CSV_PATH = os.path.join(os.path.dirname(__file__), 'sales_data.csv')
+CANCELLATIONS_CSV_PATH = os.path.join(os.path.dirname(__file__), 'cancellations_data.csv')
 
 
 def _supports_item_columns() -> bool:
@@ -53,7 +54,7 @@ def fetch_data_all_sales(start_date: str | None = None):
             )
           )
           AND orders.created_at >= :start_date
-          AND orders.created_at <= NOW()
+          AND orders.created_at < NOW()
           AND restaurants.id NOT IN (999, 1329)
           AND restaurants.name NOT LIKE 'Ethio-post%'
         GROUP BY
@@ -68,6 +69,77 @@ def fetch_data_all_sales(start_date: str | None = None):
 
     if not result.empty:
       _safe_write_csv(result, SALES_CSV_PATH)
+
+    return result
+
+
+def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | None = None):
+    if end_date is None:
+        end_date = pd.Timestamp.now().normalize()
+    else:
+        end_date = pd.to_datetime(end_date).normalize()
+
+    if start_date is None:
+        start_date = end_date - pd.DateOffset(months=2)
+    else:
+        start_date = pd.to_datetime(start_date).normalize()
+
+    query = text("""
+        SELECT
+          orders.id,
+          DATE_FORMAT(orders.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+          res.name AS restaurant_name,
+          JSON_UNQUOTE(JSON_EXTRACT(or_detail.food_details, "$.name")) AS product,
+          or_detail.price AS unit_price,
+          or_detail.quantity,
+          orders.delivery_charge,
+          orders.order_amount,
+          can_reason.message AS cancellation_reason,
+          orders.order_status,
+          CONCAT(admins.f_name, ' ', admins.l_name) AS BD,
+          CASE
+            WHEN admins.f_name IN ('Yeabtsega', 'Yohannes','Rekik','Abreham') THEN 'Team 1'
+            WHEN admins.f_name IN ('Mifta','Chernet', 'Abel','Haregewyn') THEN 'Team 2'
+            ELSE 'NO TEAM'
+          END AS team,
+          (TIMESTAMPDIFF(SECOND, orders.placed_at, orders.canceled) / 60) AS cancel_time,
+          categories.name AS category
+        FROM
+          orders
+          JOIN restaurants res ON res.id = orders.restaurant_id
+          JOIN order_details or_detail ON or_detail.order_id = orders.id
+          LEFT JOIN cancellation_reasons can_reason ON can_reason.id = orders.cancelation_reason
+          JOIN categories ON categories.id = res.category_id
+          JOIN admins ON admins.id = res.business_developer_id
+          LEFT JOIN food ON or_detail.food_id = food.id
+        WHERE
+          DATE(orders.created_at) BETWEEN :start_date AND :end_date
+          AND orders.order_status = 'canceled'
+          AND orders.restaurant_id NOT IN (999, 1329)
+          AND (
+            can_reason.message LIKE '(Restaurant)%'
+            OR orders.cancelation_reason IN ('C5', 'C2', 'C7', 'C8', 'R15')
+          )
+        GROUP BY
+          or_detail.id
+        ORDER BY
+          orders.id ASC;
+    """)
+
+    with create_db_engine().connect() as connection:
+      chunks = pd.read_sql(
+        query,
+        connection,
+        params={
+          "start_date": start_date.strftime('%Y-%m-%d'),
+          "end_date": end_date.strftime('%Y-%m-%d'),
+        },
+        chunksize=50000,
+      )
+      result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+
+    if not result.empty:
+      _safe_write_csv(result, CANCELLATIONS_CSV_PATH)
 
     return result
 
@@ -108,7 +180,7 @@ def fetch_data_all_delivered(start_date: str | None = None, end_date: str | None
                 WHEN admins.f_name IN (
                     'Mifta',
                     'Abel',
-                    'Cherenet',
+                    'Chernet',
                     'Haregewyn'
                   ) THEN 'Team 2'
                 ELSE 'NO TEAM'
@@ -168,7 +240,7 @@ def fetch_data_all_delivered(start_date: str | None = None, end_date: str | None
                 WHEN admins.f_name IN (
                     'Mifta',
                     'Abel',
-                    'Cherenet',
+                    'Chernet',
                     'Haregewyn'
                   ) THEN 'Team 2'
                 ELSE 'NO TEAM'

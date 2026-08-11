@@ -28,7 +28,18 @@ credentials:
       email: mosesteshomework@gmail.com
       failed_login_attempts: 0 # Will be managed automatically
       first_name: Moses
-      last_name: TeShome
+      last_name: Teshome
+      logged_in: False # Will be managed automatically
+      password: admin123 # Will be hashed automatically
+      roles: # Optional
+      - admin
+      - editor
+      - viewer
+    abeyimentesnot543@gmail.com:
+      email: abeyimentesnot543@gmail.com
+      failed_login_attempts: 0 # Will be managed automatically
+      first_name: Mentesnot
+      last_name:
       logged_in: False # Will be managed automatically
       password: admin123 # Will be hashed automatically
       roles: # Optional

@@ -2,6 +2,19 @@ from sqlalchemy import create_engine
 import streamlit as st
 import os
 
+# Try to prefer the mysql-connector driver, otherwise fall back to PyMySQL.
+# Hosts often omit mysql-connector; supporting both makes the app more portable.
+try:
+    import mysql.connector  # type: ignore
+    _DBAPI_DRIVER = "mysqlconnector"
+except Exception:
+    try:
+        import pymysql  # type: ignore
+
+        _DBAPI_DRIVER = "pymysql"
+    except Exception:
+        _DBAPI_DRIVER = None
+
 
 @st.cache_resource
 def create_db_engine():
@@ -33,7 +46,12 @@ def create_db_engine():
             "Database password is empty. Add it to .streamlit/secrets.toml under [mysql] or set DB_PASSWORD env var."
         )
 
-    connection_string = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
+    if _DBAPI_DRIVER is None:
+        raise RuntimeError(
+            "No MySQL DB-API driver found. Install 'mysql-connector-python' or 'PyMySQL' and add it to your requirements."
+        )
+
+    connection_string = f"mysql+{_DBAPI_DRIVER}://{user}:{password}@{host}:{port}/{database}?charset=utf8mb4"
 
     engine = create_engine(
         connection_string,

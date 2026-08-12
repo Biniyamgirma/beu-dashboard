@@ -74,15 +74,16 @@ def fetch_data_all_sales(start_date: str | None = None):
 
 
 def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | None = None):
-    if end_date is None:
-        end_date = pd.Timestamp.now().normalize()
-    else:
-        end_date = pd.to_datetime(end_date).normalize()
+  # Use full datetimes (current date + time) so we include up-to-the-second records.
+  if end_date is None:
+    end_date = pd.Timestamp.now()
+  else:
+    end_date = pd.to_datetime(end_date)
 
-    if start_date is None:
-        start_date = end_date - pd.DateOffset(months=2)
-    else:
-        start_date = pd.to_datetime(start_date).normalize()
+  if start_date is None:
+    start_date = end_date - pd.DateOffset(months=2)
+  else:
+    start_date = pd.to_datetime(start_date)
 
     query = text("""
         SELECT
@@ -113,7 +114,7 @@ def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | 
           JOIN admins ON admins.id = res.business_developer_id
           LEFT JOIN food ON or_detail.food_id = food.id
         WHERE
-          DATE(orders.created_at) BETWEEN :start_date AND :end_date
+          orders.created_at BETWEEN :start_date AND :end_date
           AND orders.order_status = 'canceled'
           AND orders.restaurant_id NOT IN (999, 1329)
           AND (
@@ -131,8 +132,8 @@ def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | 
         query,
         connection,
         params={
-          "start_date": start_date.strftime('%Y-%m-%d'),
-          "end_date": end_date.strftime('%Y-%m-%d'),
+          "start_date": start_date.strftime('%Y-%m-%d %H:%M:%S'),
+          "end_date": end_date.strftime('%Y-%m-%d %H:%M:%S'),
         },
         chunksize=50000,
       )
@@ -145,15 +146,16 @@ def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | 
 
 
 def fetch_data_all_delivered(start_date: str | None = None, end_date: str | None = None):
+    # Use full datetimes (current date + time) so delivered fetches include up-to-now records.
     if end_date is None:
-        end_date = pd.Timestamp.now().normalize()
+        end_date = pd.Timestamp.now()
     else:
-        end_date = pd.to_datetime(end_date).normalize()
+        end_date = pd.to_datetime(end_date)
 
     if start_date is None:
       start_date = end_date - pd.DateOffset(months=2)
     else:
-      start_date = pd.to_datetime(start_date).normalize()
+      start_date = pd.to_datetime(start_date)
 
     if _supports_item_columns():
         query = text("""
@@ -195,7 +197,7 @@ def fetch_data_all_delivered(start_date: str | None = None, end_date: str | None
               LEFT JOIN order_items ON order_items.order_id = orders.id
               LEFT JOIN menu_items ON menu_items.id = order_items.menu_item_id
             WHERE
-              DATE(orders.created_at) BETWEEN :start_date AND :end_date
+              orders.created_at BETWEEN :start_date AND :end_date
               AND restaurants.name NOT LIKE 'Ethio-post%'
               AND restaurants.id NOT IN (999, 1329)
               AND orders.order_status = 'delivered'
@@ -265,8 +267,8 @@ def fetch_data_all_delivered(start_date: str | None = None, end_date: str | None
         query,
         connection,
         params={
-          "start_date": start_date.strftime('%Y-%m-%d'),
-          "end_date": end_date.strftime('%Y-%m-%d'),
+          "start_date": start_date.strftime('%Y-%m-%d %H:%M:%S'),
+          "end_date": end_date.strftime('%Y-%m-%d %H:%M:%S'),
         },
         chunksize=50000,
       )

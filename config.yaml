@@ -15,15 +15,6 @@ credentials:
       - admin
       - editor
       - viewer
-    test@gmail.com:
-      email: test@gmail.com
-      failed_login_attempts: 0 # Will be managed automatically
-      first_name: Rebecca 
-      last_name: Briggs
-      logged_in: False # Will be managed automatically
-      password: def # Will be hashed automatically
-      roles: # Optional
-      - viewer
     mosesteshomework@gmail.com:
       email: mosesteshomework@gmail.com
       failed_login_attempts: 0 # Will be managed automatically
@@ -42,6 +33,28 @@ credentials:
       last_name: Abeyie
       logged_in: False # Will be managed automatically
       password: admin111 # Will be hashed automatically
+      roles: # Optional
+      - admin
+      - editor
+      - viewer
+data@et.beudelivery.com:
+      email: data@et.beudelivery.com
+      failed_login_attempts: 0 # Will be managed automatically
+      first_name: Data
+      last_name: Team
+      logged_in: False # Will be managed automatically
+      password: admin112 # Will be hashed automatically
+      roles: # Optional
+      - admin
+      - editor
+      - viewer
+messihi1234@gmail.com:
+      email: messihi1234@gmail.com
+      failed_login_attempts: 0 # Will be managed automatically
+      first_name: Messi
+      last_name: Haile
+      logged_in: False # Will be managed automatically
+      password: Mes1919Mes@ # Will be hashed automatically
       roles: # Optional
       - admin
       - editor

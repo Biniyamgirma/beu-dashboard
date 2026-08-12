@@ -18,11 +18,13 @@ def _supports_item_columns() -> bool:
     return "order_items" in tables and "menu_items" in tables
 
 
-def fetch_data_all_sales(start_date: str | None = None):
-    if start_date is None:
+def fetch_data_all_sales(start_date: str | None = None,end_date: str | None = None):
+    if start_date is None and end_date is None:
         start_date = (pd.Timestamp.now().normalize() - pd.DateOffset(months=2)).strftime('%Y-%m-%d %H:%M:%S')
+        end_date = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
     else:
         start_date = pd.to_datetime(start_date).normalize().strftime('%Y-%m-%d %H:%M:%S')
+        end_date = pd.to_datetime(end_date).normalize().strftime('%Y-%m-%d %H:%M:%S')
 
     query = text("""
         SELECT
@@ -54,7 +56,7 @@ def fetch_data_all_sales(start_date: str | None = None):
             )
           )
           AND orders.created_at >= :start_date
-          AND orders.created_at < NOW()
+          AND orders.created_at < :end_date
           AND restaurants.id NOT IN (999, 1329)
           AND restaurants.name NOT LIKE 'Ethio-post%'
         GROUP BY
@@ -64,7 +66,7 @@ def fetch_data_all_sales(start_date: str | None = None):
     """)
 
     with create_db_engine().connect() as connection:
-      chunks = pd.read_sql(query, connection, params={"start_date": start_date}, chunksize=50000)
+      chunks = pd.read_sql(query, connection, params={"start_date": start_date, "end_date": end_date}, chunksize=50000)
       result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
 
     if not result.empty:

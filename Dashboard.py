@@ -68,7 +68,6 @@ def load_data():
     return df
 
 
-@st.cache_data
 def load_sales_data():
     if os.path.exists(SALES_CSV_PATH):
         df = pd.read_csv(SALES_CSV_PATH, parse_dates=["created_at"])
@@ -604,32 +603,32 @@ if st.session_state.get("authentication_status"):
 
             chart_col1, chart_col2 = st.columns(2)
             with chart_col1:
-                revenue_by_restaurant = (
-                    filtered_sales.assign(revenue=filtered_sales['price'] * filtered_sales['quantity'])
-                    .groupby("Restaurant name", as_index=False)
-                    .agg(total_revenue=("revenue", "sum"))
-                    .sort_values("total_revenue", ascending=False)
-                    .head(20)
-                )
-                fig1 = px.bar(
-                    revenue_by_restaurant,
-                    x="total_revenue",
-                    y="Restaurant name",
-                    orientation="h",
-                    title="Top Restaurants by Revenue",
-                    labels={"total_revenue": "Revenue", "Restaurant name": "Restaurant"},
-                )
-                fig1.update_layout(
-                    yaxis={'categoryorder': 'total ascending', 'automargin': True},
-                    xaxis_tickformat=",",
-                    height=700,
-                    autosize=False,
-                    width=1200,
-                    margin={'l': 180, 'r': 20, 't': 50, 'b': 50},
-                )
-                st.markdown("<div style='overflow-x:auto'>", unsafe_allow_html=True)
-                st.plotly_chart(fig1, use_container_width=False, width=1200, config={"responsive": True})
-                st.markdown("</div>", unsafe_allow_html=True)
+                    revenue_by_restaurant = (
+                        filtered_sales.assign(restaurant_fee=filtered_sales['price'] * filtered_sales['quantity'])
+                        .groupby("Restaurant name", as_index=False)
+                        .agg(total_res_fee=("restaurant_fee", "sum"))
+                        .sort_values("total_res_fee", ascending=False)
+                        .head(20)
+                    )
+                    fig1 = px.bar(
+                        revenue_by_restaurant,
+                        x="total_res_fee",
+                        y="Restaurant name",
+                        orientation="h",
+                        title="Top Restaurants by Restaurant Fee",
+                        labels={"total_res_fee": "Restaurant Fee (ETB)", "Restaurant name": "Restaurant"},
+                    )
+                    fig1.update_layout(
+                        yaxis={'categoryorder': 'total ascending', 'automargin': True},
+                        xaxis_tickformat=",",
+                        height=700,
+                        autosize=False,
+                        width=1200,
+                        margin={'l': 180, 'r': 20, 't': 50, 'b': 50},
+                    )
+            st.markdown("<div style='overflow-x:auto'>", unsafe_allow_html=True)
+            st.plotly_chart(fig1, use_container_width=False, width=1200, config={"responsive": True})
+            st.markdown("</div>", unsafe_allow_html=True)
 
             with chart_col2:
                 product_counts = (
@@ -659,18 +658,18 @@ if st.session_state.get("authentication_status"):
                 st.markdown("</div>", unsafe_allow_html=True)
 
             sales_trend = (
-                filtered_sales.assign(revenue=filtered_sales['price'] * filtered_sales['quantity'])
-                .groupby("Date", as_index=False)["revenue"]
+                filtered_sales.assign(price=filtered_sales['price'] * filtered_sales['quantity'])
+                .groupby("Date", as_index=False)["price"]
                 .sum()
                 .sort_values("Date")
             )
             fig3 = px.line(
                 sales_trend,
                 x="Date",
-                y="revenue",
-                title="Daily Revenue Trend",
+                y="price",
+                title="Daily Sales Trend",
                 markers=True,
-                labels={"revenue": "Revenue"},
+                labels={"price": "Price"},
             )
             fig3.update_layout(hovermode="x unified")
             st.plotly_chart(fig3, use_container_width=True)

@@ -59,3 +59,25 @@ messihi1234@gmail.com:
       - admin
       - editor
       - viewer
+kaluaabe@gmail.com:
+      email: kaluaabe@gmail.com
+      failed_login_attempts: 0 # Will be managed automatically
+      first_name: Kalewengel
+      last_name: Abebe
+      logged_in: False 
+      password: 121314 
+      roles: # Optional
+      - admin
+      - editor
+      - viewer
+bdmanager@et.beudelivery.com:
+      email: bdmanager@et.beudelivery.com
+      failed_login_attempts: 0 # Will be managed automatically
+      first_name: BD 
+      last_name: Manager
+      logged_in: False 
+      password: Besisay@12345678 
+      roles: # Optional
+      - admin
+      - editor
+      - viewer

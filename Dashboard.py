@@ -632,6 +632,7 @@ if st.session_state.get("authentication_status"):
 
             with chart_col2:
                 product_counts = (
+                    
                     filtered_sales.groupby("product", as_index=False)
                     .agg(total_quantity=("quantity", "sum"))
                     .sort_values("total_quantity", ascending=False)

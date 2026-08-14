@@ -10,7 +10,7 @@ credentials:
       first_name: Biniyam
       last_name: Girma
       logged_in: False # Will be managed automatically
-      password: 091625 # Will be hashed automatically
+      password: '091625' # Will be hashed automatically
       roles: # Optional
       - admin
       - editor
@@ -65,7 +65,7 @@ credentials:
           first_name: Kalewengel
           last_name: Abebe
           logged_in: False 
-          password: 121314 
+          password: '121314' 
           roles: # Optional
           - admin
           - editor

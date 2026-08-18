@@ -43,17 +43,6 @@ authenticator = stauth.Authenticate(
 user_roles = []
 if current_user and current_user in config.get("credentials", {}).get("usernames", {}):
     user_roles = config["credentials"]["usernames"][current_user].get("roles", [])
-    # Your code to fetch and display marketing budget
-RESTAURANT_NAMES = [
-    "818 Burger |Bole", "818 Burgers", "Chanoly Noodles | S...",
-    "Smash Burger |Bole", "Akwaba Burger|Sum...", "Pullup Burger",
-    "OSCAR BURGER|Bal...", "Rivonia Eatery | Sum...",
-    "Chao Fan Fried Rice", "Choke Burger | Lebu", "Simple Bistro |Sum...",
-]
-
-BD_NAMES = [
-    "Yeabtsega", "Chernet", "Yohannes", "Abel Wako", "Harege",
-]
 
 
 @st.cache_data
@@ -283,31 +272,59 @@ if st.session_state.get("authentication_status"):
             min_value=min_date,
             max_value=max_date,
         )
-
-        # --- Filters with cascading logic ---
         st.subheader("Filters")
+
+       
         col1, col2, col3, col4 = st.columns(4)
         
-        # Initialize session state for filters if not exists
+        # Initialize session state for filters in the new order
+        if "delivery_bd_name" not in st.session_state:
+            # If viewer, the df is already filtered to them, so unique() is just their name
+            st.session_state.delivery_bd_name = sorted(df["BD NAME"].dropna().unique().tolist())
         if "delivery_restaurant" not in st.session_state:
             st.session_state.delivery_restaurant = sorted(df["Restaurant name"].dropna().unique().tolist())
-        if "delivery_bd_name" not in st.session_state:
-            bd_opts = sorted(df["BD NAME"].dropna().unique().tolist())
-            if is_viewer and user_full_name:
-                st.session_state.delivery_bd_name = [user_full_name] if user_full_name in bd_opts else bd_opts
-            else:
-                st.session_state.delivery_bd_name = bd_opts
         if "delivery_team" not in st.session_state:
             st.session_state.delivery_team = sorted(df["Team"].dropna().unique().tolist())
         if "delivery_category" not in st.session_state:
             st.session_state.delivery_category = sorted(df["Categories_Name"].dropna().unique().tolist())
 
+        # 1. BD Name Filter (First)
         with col1:
-            all_restaurants = sorted(df["Restaurant name"].dropna().unique().tolist())
+            all_bds = sorted(df["BD NAME"].dropna().unique().tolist())
+            
+            # Ensure the session state only has valid options
+            filtered_bd = [x for x in st.session_state.delivery_bd_name if x in all_bds]
+            if not filtered_bd and all_bds:
+                filtered_bd = all_bds
+                
+            bd_name = st.multiselect(
+                "BD Name",
+                all_bds,
+                default=filtered_bd,
+                key="delivery_bd_select",
+                placeholder="Search & select BD names...",
+                disabled=is_viewer  # Locks the filter so viewers can't remove their name
+            )
+            st.session_state.delivery_bd_name = bd_name
+            if bd_name:
+                st.caption(f"✓ {len(bd_name)} selected")
+
+        # 2. Restaurant Filter (Cascades from BD Name)
+        with col2:
+            temp_df = df.copy()
+            if bd_name:
+                temp_df = temp_df[temp_df["BD NAME"].isin(bd_name)]
+                
+            available_restaurants = sorted(temp_df["Restaurant name"].dropna().unique().tolist())
+            
+            filtered_restaurant = [x for x in st.session_state.delivery_restaurant if x in available_restaurants]
+            if not filtered_restaurant and available_restaurants:
+                filtered_restaurant = available_restaurants
+                
             restaurant = st.multiselect(
                 "Restaurant",
-                all_restaurants,
-                default=st.session_state.delivery_restaurant,
+                available_restaurants,
+                default=filtered_restaurant,
                 key="delivery_restaurant_select",
                 placeholder="Search & select restaurants..."
             )
@@ -315,36 +332,14 @@ if st.session_state.get("authentication_status"):
             if restaurant:
                 st.caption(f"✓ {len(restaurant)} selected")
 
-        # Filter available BD names based on selected restaurants
-        with col2:
-            temp_df = df.copy()
-            if restaurant:
-                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
-            available_bd = sorted(temp_df["BD NAME"].dropna().unique().tolist())
-            
-            # Filter session state to only valid options
-            filtered_bd = [x for x in st.session_state.delivery_bd_name if x in available_bd]
-            if not filtered_bd and available_bd:
-                filtered_bd = available_bd if not is_viewer else [x for x in available_bd if x == user_full_name]
-            
-            bd_name = st.multiselect(
-                "BD Name",
-                available_bd,
-                default=filtered_bd,
-                key="delivery_bd_select",
-                placeholder="Search & select BD names..."
-            )
-            st.session_state.delivery_bd_name = bd_name
-            if bd_name:
-                st.caption(f"✓ {len(bd_name)} selected")
-
-        # Filter available teams based on selected restaurants and BD names
+        # 3. Team Filter (Cascades from BD Name + Restaurant)
         with col3:
             temp_df = df.copy()
-            if restaurant:
-                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
             if bd_name:
                 temp_df = temp_df[temp_df["BD NAME"].isin(bd_name)]
+            if restaurant:
+                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
+                
             available_teams = sorted(temp_df["Team"].dropna().unique().tolist())
             
             filtered_team = [x for x in st.session_state.delivery_team if x in available_teams]
@@ -362,15 +357,16 @@ if st.session_state.get("authentication_status"):
             if team:
                 st.caption(f"✓ {len(team)} selected")
 
-        # Filter available categories based on all previous selections
+        # 4. Category Filter (Cascades from BD Name + Restaurant + Team)
         with col4:
             temp_df = df.copy()
-            if restaurant:
-                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
             if bd_name:
                 temp_df = temp_df[temp_df["BD NAME"].isin(bd_name)]
+            if restaurant:
+                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
             if team:
                 temp_df = temp_df[temp_df["Team"].isin(team)]
+                
             available_categories = sorted(temp_df["Categories_Name"].dropna().unique().tolist())
             
             filtered_category = [x for x in st.session_state.delivery_category if x in available_categories]
@@ -388,34 +384,51 @@ if st.session_state.get("authentication_status"):
             if category_name:
                 st.caption(f"✓ {len(category_name)} selected")
 
-        # Apply all filters
+        # Apply all filters to the main dataframe
         filtered_df = df.copy()
-
-        if restaurant:
-            filtered_df = filtered_df[filtered_df["Restaurant name"].isin(restaurant)]
 
         if bd_name:
             filtered_df = filtered_df[filtered_df["BD NAME"].isin(bd_name)]
+
+        if restaurant:
+            filtered_df = filtered_df[filtered_df["Restaurant name"].isin(restaurant)]
 
         if team:
             filtered_df = filtered_df[filtered_df["Team"].isin(team)]
 
         if category_name:
             filtered_df = filtered_df[filtered_df["Categories_Name"].isin(category_name)]
+        # 1. Initialize prev_df as an empty DataFrame so it always exists
+        prev_df = pd.DataFrame(columns=filtered_df.columns)
 
+        # 2. Handle the date ranges safely
         if len(date_range) == 2:
             start_date, end_date = date_range
             num_days = (end_date - start_date).days + 1
             prev_end_date = start_date - timedelta(days=1)
             prev_start_date = start_date - timedelta(days=num_days)
-            prev_df = base_filtered_df[
-                (base_filtered_df["Date"] >= prev_start_date) & 
-                (base_filtered_df["Date"] <= prev_end_date)
+            
+            # FIX: Use 'filtered_df' instead of 'base_filtered_df' so dropdown selections apply to the previous period too!
+            prev_df = filtered_df[
+                (filtered_df["Date"] >= prev_start_date) & 
+                (filtered_df["Date"] <= prev_end_date)
             ]
+            
             filtered_df = filtered_df[
                 (filtered_df["Date"] >= start_date) &
                 (filtered_df["Date"] <= end_date)
             ]
+            
+        elif len(date_range) == 1:
+            # If the user only selects a single date
+            start_date = date_range[0]
+            
+            # The previous period is exactly 1 day before
+            prev_date = start_date - timedelta(days=1)
+            
+            # FIX: Use 'filtered_df' here as well
+            prev_df = filtered_df[filtered_df["Date"] == prev_date]
+            filtered_df = filtered_df[filtered_df["Date"] == start_date]
         def get_metric_delta(curr_val: float, prev_val: float) -> str:
             if prev_val == 0:
                 return "+100.0%" if curr_val > 0 else ("0.0%" if curr_val == 0 else "-100.0%")
@@ -517,7 +530,11 @@ if st.session_state.get("authentication_status"):
                 ),
             },
         )
-
+        # This will display the actual list of available columns on your dashboard
+        # st.write("Actual columns in rest_df:", rest_df.columns.tolist())
+        cols_to_show = ["ORDERS", "Restaurant name","created_at","restaurant_discount","restaurant_discount_on_food","restaurant_fee","BD NAME"]
+        st.header("Restaurnt Sales Report")
+        st.dataframe(filtered_df[cols_to_show])
         show_bar_table(
             filtered_df.groupby(["BD NAME"], as_index=False)
                             ["ORDERS"]
@@ -1133,11 +1150,9 @@ if st.session_state.get("authentication_status"):
         summary_col1.metric("Quantity", len(filtered_cancel_df))
         summary_col2.metric("Avg Cancel Time", f"{filtered_cancel_df['cancel_time'].mean():.1f} mins")
         summary_col3.metric("Number of Order", filtered_cancel_df['id'].nunique())
-
         if filtered_cancel_df.empty:
             st.info("No cancellation data matches the selected filters.")
         else:
-            
             st.subheader("Cancellation Reason Counts")
             reason_summary = (
                 filtered_cancel_df.groupby("cancellation_reason", as_index=False)["id"]
@@ -1152,7 +1167,6 @@ if st.session_state.get("authentication_status"):
                 use_container_width=True, 
                 hide_index=True
             )
-
             team_summary = (
                 filtered_cancel_df.groupby("team", as_index=False)["id"]
                 .count()
@@ -1166,6 +1180,20 @@ if st.session_state.get("authentication_status"):
             )
             st.plotly_chart(fig_team, use_container_width=True)
 
+            st.subheader("Cancellation Summary")
+
+            # Group by the required columns and count unique order IDs
+            # Note: Ensure "order_id" matches the actual column name in your DataFrame
+            aggregated_cancel_df = (
+                filtered_cancel_df.groupby(["restaurant_name", "BD", "cancellation_reason"])["id"]
+                .nunique()
+                .reset_index(name="total_unique_orders")
+            )
+            st.dataframe(
+                aggregated_cancel_df.sort_values("total_unique_orders", ascending=False),
+                use_container_width=True,
+            )
+            
             st.subheader("Cancellation Details")
             display_columns = [
                 "id",
@@ -1190,8 +1218,6 @@ if st.session_state.get("authentication_status"):
                 filtered_cancel_df.sort_values("created_at", ascending=False)[display_columns],
                 use_container_width=True,
             )
-    
-
     # 3. Use user_roles in your condition
     elif category == "Marketing Budget" and ("admin" in user_roles or "marketing" in user_roles):
         st.subheader("Marketing Budget")
@@ -1216,9 +1242,6 @@ if st.session_state.get("authentication_status"):
             st.info("Please select both a start and end date.")
 
     # Your logic here
-        
-
-        
     # ---- your other categories (Call Center, Area Manager, etc.) go here ----
 
 elif st.session_state.get("authentication_status") is False:

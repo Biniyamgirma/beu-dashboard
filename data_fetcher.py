@@ -165,7 +165,16 @@ def fetch_data_all_delivered(start_date: str | None = None, end_date: str | None
               orders.id AS ORDERS,
               restaurants.name AS `Restaurant name`,
               DATE_FORMAT(orders.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
-              orders.coupon_discount_amount,
+                    IF(
+                      order_status = 'delivered',
+                      IF(
+                        orders.coupon_discount_amount = 0 AND coupon_code IS NOT NULL,
+                        orders.original_delivery_charge,
+                        orders.coupon_discount_amount
+                      ),
+                      0
+                    )
+                   AS coupon_discount,
               restaurant_fee_details.restaurant_discount,
               restaurant_fee_details.restaurant_discount_on_food,
               restaurant_fee_details.beu_discount,
@@ -281,6 +290,71 @@ def fetch_data_all_delivered(start_date: str | None = None, end_date: str | None
 
     return result
 
+def fetch_marketing_budgets(start_date: str | None = None, end_date: str | None = None):
+
+
+    # Use full datetimes (current date + time) so we include up-to-the-second records.
+    if end_date is None:
+      end_date = pd.Timestamp.now()
+    else:
+      end_date = pd.to_datetime(end_date)
+
+    if start_date is None:
+      start_date = end_date - pd.DateOffset(months=2)
+    else:
+      start_date = pd.to_datetime(start_date)
+
+      query = text("""
+                  SELECT
+              CONCAT(MIN(DATE(orders.created_at)), " - ", MAX(DATE(orders.created_at))) AS date_range,
+              SUM(
+                IF(
+                  order_status = 'delivered',
+                  IF(
+                    orders.coupon_discount_amount = 0 AND coupon_code IS NOT NULL,
+                    orders.original_delivery_charge,
+                    orders.coupon_discount_amount
+                  ),
+                  0
+                )
+              ) AS coupon_discount,
+
+              -- 2. Standard Aggregations
+              sum(rfd.beu_discount
+                  + rfd.beu_discount_on_food) as beu_discount,
+              SUM(IF(wt.transaction_type LIKE '%debit%', wt.debit, 0)) AS wallet_used,
+              SUM(orders.streak_discount_amount) AS streak_discount,
+              SUM(orders.tier_discount_amount) AS tier_discount,
+              -- 3. POS Discount
+              SUM(IF(orders.created_by = 471, orders.pos_discount_amount, 0)) AS pos_discount,
+
+              -- 4. Fixed JSON Delivery Charge logic (Added unique aliases and commas)
+              SUM(IF(orders.log_details ->> '$.delivery_charges.free_delivery' = '1', orders.original_delivery_charge, 0)) AS free_delivery_Res,
+              SUM(IF(orders.log_details ->> '$.delivery_charges.free_delivery' = '2', orders.original_delivery_charge, 0)) AS free_delivery_Coupoun,
+              -- SUM(IF(orders.log_details ->> '$.delivery_charges.free_delivery' = '3', orders.original_delivery_charge, 0)) AS free_delivery_Driver,
+              -- SUM(IF(orders.log_details ->> '$.delivery_charges.free_delivery' = '4', orders.original_delivery_charge, 0)) AS free_delivery_Refferal,
+              SUM(IF(orders.log_details ->> '$.delivery_charges.free_delivery' = '5', orders.original_delivery_charge, 0)) AS free_delivery_tier,
+              SUM(IF(orders.log_details ->> '$.delivery_charges.free_delivery' = '6', orders.original_delivery_charge, 0)) AS free_delivery_streak
+              -- SUM(IF(orders.log_details ->> '$.delivery_charges.free_delivery' = '7', orders.original_delivery_charge, 0)) AS free_delivery_order_takeaway,
+              -- SUM(IF(orders.log_details ->> '$.delivery_charges.free_delivery' = '8', orders.original_delivery_charge, 0)) AS free_delivery_Pos
+
+            FROM orders
+            JOIN restaurant_fee_details rfd ON rfd.order_id = orders.id
+            LEFT JOIN wallet_transactions wt ON wt.order_id = orders.id
+            WHERE DATE(orders.created_at) BETWEEN :start_date AND :end_date
+              and orders.order_status = "delivered";
+                """)
+
+      with create_db_engine().connect() as connection:
+        df = pd.read_sql(
+            query,
+            connection,
+            params={
+                "start_date": start_date.strftime('%Y-%m-%d %H:%M:%S'),
+                "end_date": end_date.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+        )
+        return df
 
 def _safe_write_csv(df: pd.DataFrame, path: str) -> str:
     """Write CSV safely: atomic replace via temp file, fallback to timestamped file on PermissionError.
@@ -319,3 +393,4 @@ def _safe_write_csv(df: pd.DataFrame, path: str) -> str:
     except Exception as e:
       logging.error(f"Unexpected error writing CSV to {path}: {e}")
       raise
+

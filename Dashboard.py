@@ -8,6 +8,7 @@ import streamlit_authenticator as stauth
 import pandas as pd 
 import numpy as np
 import datetime as dt
+from datetime import timedelta
 import plotly.express as px
 import plotly.figure_factory as ff
 
@@ -16,10 +17,17 @@ from data_fetcher import (
     fetch_data_all_delivered,
     fetch_data_all_sales,
     fetch_data_all_cancellations,
+    fetch_marketing_budgets,
     CSV_PATH,
     SALES_CSV_PATH,
     CANCELLATIONS_CSV_PATH,
 )
+
+# 1. Get the logged-in username (usually set by streamlit-authenticator in st.session_state)
+current_user = st.session_state.get("username")  # or st.session_state.get("name")
+
+# 2. Extract roles safely from config['credentials']['usernames']
+
 
 with open(CONFIG_PATH) as file:
     config = yaml.load(file, Loader=SafeLoader)
@@ -32,7 +40,10 @@ authenticator = stauth.Authenticate(
     config['cookie']['expiry_days'],
 )
 
-
+user_roles = []
+if current_user and current_user in config.get("credentials", {}).get("usernames", {}):
+    user_roles = config["credentials"]["usernames"][current_user].get("roles", [])
+    # Your code to fetch and display marketing budget
 RESTAURANT_NAMES = [
     "818 Burger |Bole", "818 Burgers", "Chanoly Noodles | S...",
     "Smash Burger |Bole", "Akwaba Burger|Sum...", "Pullup Burger",
@@ -166,6 +177,7 @@ def get_user_info_from_config():
 
     full_name = f"{user_info.get('first_name', '').strip()} {user_info.get('last_name', '').strip()}".strip()
     return username, roles, full_name
+username, roles, user_full_name = get_user_info_from_config()
 
 
 def safe_max_int(series):
@@ -220,10 +232,13 @@ except Exception as e:
 if st.session_state.get("authentication_status"):
     authenticator.logout("Logout", "sidebar")
     st.sidebar.write(f'Welcome *{st.session_state["name"]}*')
-    category = st.sidebar.radio(
-        "Select Category:",
-        ["ALL Delivered", "All Sales", "All Cancellations"]
-    )
+    categories = ["ALL Delivered", "All Sales", "All Cancellations"]
+
+    # 4. Conditionally add 'Marketing Budget' if the user has 'marketing' or 'admin' role
+    if "marketing" in roles or "admin" in roles:
+        categories.append("Marketing Budget")
+    # 5. Render the radio button with the filtered options list
+    category = st.sidebar.radio("Select Category:", categories)
 
     if category == "ALL Delivered":
         st.subheader("ALL Delivered")
@@ -241,7 +256,7 @@ if st.session_state.get("authentication_status"):
             st.warning("No delivery data available. Use Refresh delivered and sales data to fetch a fresh dataset.")
             
 
-        username, roles, user_full_name = get_user_info_from_config()
+        
         is_admin = "admin" in [role.lower() for role in roles]
         is_viewer = not is_admin and "viewer" in [role.lower() for role in roles]
 
@@ -261,6 +276,7 @@ if st.session_state.get("authentication_status"):
         max_date = df["Date"].max()
 
         st.title("beU Delivery Dashboard")
+        base_filtered_df = df.copy()
         date_range = st.date_input(
             "Select Date Range",
             value=(min_date, max_date),
@@ -268,77 +284,181 @@ if st.session_state.get("authentication_status"):
             max_value=max_date,
         )
 
-        # --- Filters ---
+        # --- Filters with cascading logic ---
+        st.subheader("Filters")
         col1, col2, col3, col4 = st.columns(4)
+        
+        # Initialize session state for filters if not exists
+        if "delivery_restaurant" not in st.session_state:
+            st.session_state.delivery_restaurant = sorted(df["Restaurant name"].dropna().unique().tolist())
+        if "delivery_bd_name" not in st.session_state:
+            bd_opts = sorted(df["BD NAME"].dropna().unique().tolist())
+            if is_viewer and user_full_name:
+                st.session_state.delivery_bd_name = [user_full_name] if user_full_name in bd_opts else bd_opts
+            else:
+                st.session_state.delivery_bd_name = bd_opts
+        if "delivery_team" not in st.session_state:
+            st.session_state.delivery_team = sorted(df["Team"].dropna().unique().tolist())
+        if "delivery_category" not in st.session_state:
+            st.session_state.delivery_category = sorted(df["Categories_Name"].dropna().unique().tolist())
 
         with col1:
-            restaurant = st.selectbox(
+            all_restaurants = sorted(df["Restaurant name"].dropna().unique().tolist())
+            restaurant = st.multiselect(
                 "Restaurant",
-                ["All"] + sorted(df["Restaurant name"].dropna().unique().tolist()),
+                all_restaurants,
+                default=st.session_state.delivery_restaurant,
+                key="delivery_restaurant_select",
+                placeholder="Search & select restaurants..."
             )
+            st.session_state.delivery_restaurant = restaurant
+            if restaurant:
+                st.caption(f"✓ {len(restaurant)} selected")
 
+        # Filter available BD names based on selected restaurants
         with col2:
-            bd_options = ["All"] + sorted(df["BD NAME"].dropna().unique().tolist())
-            # If viewer, ensure their name appears and is auto-selected
-            if is_viewer and user_full_name:
-                if user_full_name not in bd_options:
-                    bd_options = [user_full_name] + bd_options
-                try:
-                    bd_index = bd_options.index(user_full_name)
-                except ValueError:
-                    bd_index = 0
-            else:
-                bd_index = 0
-
-            bd_name = st.selectbox(
+            temp_df = df.copy()
+            if restaurant:
+                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
+            available_bd = sorted(temp_df["BD NAME"].dropna().unique().tolist())
+            
+            # Filter session state to only valid options
+            filtered_bd = [x for x in st.session_state.delivery_bd_name if x in available_bd]
+            if not filtered_bd and available_bd:
+                filtered_bd = available_bd if not is_viewer else [x for x in available_bd if x == user_full_name]
+            
+            bd_name = st.multiselect(
                 "BD Name",
-                bd_options,
-                index=bd_index,
+                available_bd,
+                default=filtered_bd,
+                key="delivery_bd_select",
+                placeholder="Search & select BD names..."
             )
+            st.session_state.delivery_bd_name = bd_name
+            if bd_name:
+                st.caption(f"✓ {len(bd_name)} selected")
 
+        # Filter available teams based on selected restaurants and BD names
         with col3:
-            team = st.selectbox(
+            temp_df = df.copy()
+            if restaurant:
+                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
+            if bd_name:
+                temp_df = temp_df[temp_df["BD NAME"].isin(bd_name)]
+            available_teams = sorted(temp_df["Team"].dropna().unique().tolist())
+            
+            filtered_team = [x for x in st.session_state.delivery_team if x in available_teams]
+            if not filtered_team and available_teams:
+                filtered_team = available_teams
+            
+            team = st.multiselect(
                 "Team",
-                ["All"] + sorted(df["Team"].dropna().unique().tolist()),
+                available_teams,
+                default=filtered_team,
+                key="delivery_team_select",
+                placeholder="Search & select teams..."
             )
+            st.session_state.delivery_team = team
+            if team:
+                st.caption(f"✓ {len(team)} selected")
 
+        # Filter available categories based on all previous selections
         with col4:
-            category_name = st.selectbox(
+            temp_df = df.copy()
+            if restaurant:
+                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
+            if bd_name:
+                temp_df = temp_df[temp_df["BD NAME"].isin(bd_name)]
+            if team:
+                temp_df = temp_df[temp_df["Team"].isin(team)]
+            available_categories = sorted(temp_df["Categories_Name"].dropna().unique().tolist())
+            
+            filtered_category = [x for x in st.session_state.delivery_category if x in available_categories]
+            if not filtered_category and available_categories:
+                filtered_category = available_categories
+            
+            category_name = st.multiselect(
                 "Category",
-                ["All"] + sorted(df["Categories_Name"].dropna().unique().tolist()),
+                available_categories,
+                default=filtered_category,
+                key="delivery_category_select",
+                placeholder="Search & select categories..."
             )
+            st.session_state.delivery_category = category_name
+            if category_name:
+                st.caption(f"✓ {len(category_name)} selected")
 
+        # Apply all filters
         filtered_df = df.copy()
 
-        if restaurant != "All":
-            filtered_df = filtered_df[filtered_df["Restaurant name"] == restaurant]
+        if restaurant:
+            filtered_df = filtered_df[filtered_df["Restaurant name"].isin(restaurant)]
 
-        if bd_name != "All":
-            filtered_df = filtered_df[filtered_df["BD NAME"] == bd_name]
+        if bd_name:
+            filtered_df = filtered_df[filtered_df["BD NAME"].isin(bd_name)]
 
-        if team != "All":
-            filtered_df = filtered_df[filtered_df["Team"] == team]
+        if team:
+            filtered_df = filtered_df[filtered_df["Team"].isin(team)]
 
-        if category_name != "All":
-            filtered_df = filtered_df[filtered_df["Categories_Name"] == category_name]
+        if category_name:
+            filtered_df = filtered_df[filtered_df["Categories_Name"].isin(category_name)]
 
         if len(date_range) == 2:
             start_date, end_date = date_range
+            num_days = (end_date - start_date).days + 1
+            prev_end_date = start_date - timedelta(days=1)
+            prev_start_date = start_date - timedelta(days=num_days)
+            prev_df = base_filtered_df[
+                (base_filtered_df["Date"] >= prev_start_date) & 
+                (base_filtered_df["Date"] <= prev_end_date)
+            ]
             filtered_df = filtered_df[
                 (filtered_df["Date"] >= start_date) &
                 (filtered_df["Date"] <= end_date)
             ]
+        def get_metric_delta(curr_val: float, prev_val: float) -> str:
+            if prev_val == 0:
+                return "+100.0%" if curr_val > 0 else ("0.0%" if curr_val == 0 else "-100.0%")
+            pct_change = ((curr_val - prev_val) / abs(prev_val)) * 100
+            return f"{pct_change:+.1f}% vs prev period"
+        
+        def compute_metric(col_name=None, is_count=False, currency="ETB"):
+            if is_count:
+                curr_val = len(filtered_df)
+                prev_val = len(prev_df)
+                val_str = f"{curr_val:,}"
+            else:
+                curr_val = filtered_df[col_name].sum() if not filtered_df.empty else 0.0
+                prev_val = prev_df[col_name].sum() if not prev_df.empty else 0.0
+                val_str = f"{curr_val:,.2f} {currency}"
 
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Orders", len(filtered_df))
-        m2.metric("Commission Value", f"{filtered_df['commission_value'].sum():,.2f} ETB")
-        m3.metric("Restaurant Fee", f"{filtered_df['restaurant_fee'].sum():,.2f} ETB")
+            delta_str = get_metric_delta(curr_val, prev_val) if not prev_df.empty else None
+            return val_str, delta_str
 
-        m1.metric("Restaurant Discount", f"{filtered_df['restaurant_discount'].sum():,.2f} ETB")
-        m2.metric("beU Discount", f"{filtered_df['beu_discount'].sum():,.2f} ETB")
-        m3.metric("Restaurant Discount On Food", f"{filtered_df['restaurant_discount_on_food'].sum():,.2f} ETB")
+        # --- Metrics Display ---
+        st.subheader("Performance Overview")
+        # Metric Definitions: (Label, Column Name, Is Count Flag)
+        metrics_config = [
+            ("Total1 Orders", None, True),
+            ("Commission Value", "commission_value", False),
+            ("Restaurant Fee", "restaurant_fee", False),
+            ("Restaurant Discount", "restaurant_discount", False),
+            ("beU Discount", "beu_discount", False),
+            ("beU Discount On Food", "beu_discount_on_food", False),
+            ("Restaurant Discount On Food", "restaurant_discount_on_food", False),
+            ("Coupon Discount Amount", "coupon_discount_amount", False),
+        ]
 
-        st.metric("Coupon Discount Amount", f"{filtered_df['coupon_discount_amount'].sum():,.2f} ETB")
+        # Render dynamically in a 3-column grid
+        cols = st.columns(3)
+        for idx, (label, col_name, is_count) in enumerate(metrics_config):
+            val_str, delta_str = compute_metric(col_name=col_name, is_count=is_count)
+            cols[idx % 3].metric(
+                label=label,
+                value=val_str,
+                delta=delta_str,
+                delta_color="normal"  # Green for positive, Red for negative
+            )
 
         
         chart_col1, chart_col2 = st.columns(2)
@@ -348,7 +468,7 @@ if st.session_state.get("authentication_status"):
                 filtered_df,
                 group_col="BD NAME",
                 value_col="commission_value",
-                title="BD Performance Commission Value",
+                title="BD Performance Commission Valu",
                 show_rank=True,
             )
 
@@ -399,37 +519,39 @@ if st.session_state.get("authentication_status"):
         )
 
         show_bar_table(
-            filtered_df,
+            filtered_df.groupby(["BD NAME"], as_index=False)
+                            ["ORDERS"]
+                            .count()
+                            .sort_values(["BD NAME"]),
             group_col="BD NAME",
-            value_col="commission_value",
-            title="BD Performance Commission Value",
+            value_col="ORDERS",
+            title="BD Performance Total Delivered Order",
             show_rank=True,
         )
-
         if not filtered_df.empty:
             team_commission = (
                 filtered_df.groupby(["Date", "Team"], as_index=False)
-                ["commission_value"]
-                .sum()
+                ["ORDERS"]
+                .count()
                 .sort_values(["Team", "Date"])
             )
 
             fig = px.line(
                 team_commission,
                 x="Date",
-                y="commission_value",
+                y="ORDERS",
                 color="Team",
                 markers=True,
-                title="Team Commission Performance",
+                title="Team Delivered Order Performance",
                 labels={
-                    "commission_value": "Commission Value (ETB)",
+                    "Order_count": "Order_count",
                     "Date": "Date",
                 },
             )
             fig.update_layout(hovermode="x unified")
             st.plotly_chart(fig, width="stretch")
         else:
-            st.info("No team commission data available for the current filters.")
+            st.info("No team Order count data available for the current filters.")
 
     elif category == "All Sales":
         st.subheader("All Sales")
@@ -479,39 +601,107 @@ if st.session_state.get("authentication_status"):
             format="HH:mm",
         )
 
-        filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
-        with filter_col1:
-            restaurant = st.selectbox(
-                "Restaurant",
-                ["All"] + sorted(sales_df["Restaurant name"].dropna().unique().tolist()),
-            )
-        with filter_col2:
-            bd_options = ["All"] + sorted(sales_df["bd_name"].dropna().unique().tolist())
+        # Initialize session state for sales filters
+        if "sales_restaurant" not in st.session_state:
+            st.session_state.sales_restaurant = sorted(sales_df["Restaurant name"].dropna().unique().tolist())
+        if "sales_bd_name" not in st.session_state:
+            bd_opts = sorted(sales_df["bd_name"].dropna().unique().tolist())
             if is_viewer and user_full_name:
-                if user_full_name not in bd_options:
-                    bd_options = [user_full_name] + bd_options
-                try:
-                    bd_index = bd_options.index(user_full_name)
-                except ValueError:
-                    bd_index = 0
+                st.session_state.sales_bd_name = [user_full_name] if user_full_name in bd_opts else bd_opts
             else:
-                bd_index = 0
+                st.session_state.sales_bd_name = bd_opts
+        if "sales_status" not in st.session_state:
+            st.session_state.sales_status = sorted(sales_df["order_status"].dropna().unique().tolist())
+        if "sales_category" not in st.session_state:
+            st.session_state.sales_category = sorted(sales_df["category"].dropna().unique().tolist())
 
-            bd_name = st.selectbox(
+        filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
+        
+        # Restaurant Filter
+        with filter_col1:
+            all_restaurants = sorted(sales_df["Restaurant name"].dropna().unique().tolist())
+            restaurant = st.multiselect(
+                "Restaurant",
+                all_restaurants,
+                default=st.session_state.sales_restaurant,
+                key="sales_restaurant_select",
+                placeholder="Search & select restaurants..."
+            )
+            st.session_state.sales_restaurant = restaurant
+            if restaurant:
+                st.caption(f"✓ {len(restaurant)} selected")
+        
+        # BD Name Filter - filtered based on restaurant selection
+        with filter_col2:
+            temp_df = sales_df.copy()
+            if restaurant:
+                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
+            available_bd = sorted(temp_df["bd_name"].dropna().unique().tolist())
+            
+            filtered_bd = [x for x in st.session_state.sales_bd_name if x in available_bd]
+            if not filtered_bd and available_bd:
+                filtered_bd = available_bd if not is_viewer else [x for x in available_bd if x == user_full_name]
+            
+            bd_name = st.multiselect(
                 "BD Name",
-                bd_options,
-                index=bd_index,
+                available_bd,
+                default=filtered_bd,
+                key="sales_bd_select",
+                placeholder="Search & select BD names..."
             )
+            st.session_state.sales_bd_name = bd_name
+            if bd_name:
+                st.caption(f"✓ {len(bd_name)} selected")
+        
+        # Order Status Filter - filtered based on restaurant and BD selection
         with filter_col3:
-            order_status = st.selectbox(
+            temp_df = sales_df.copy()
+            if restaurant:
+                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
+            if bd_name:
+                temp_df = temp_df[temp_df["bd_name"].isin(bd_name)]
+            available_status = sorted(temp_df["order_status"].dropna().unique().tolist())
+            
+            filtered_status = [x for x in st.session_state.sales_status if x in available_status]
+            if not filtered_status and available_status:
+                filtered_status = available_status
+            
+            order_status = st.multiselect(
                 "Order Status",
-                ["All"] + sorted(sales_df["order_status"].dropna().unique().tolist()),
+                available_status,
+                default=filtered_status,
+                key="sales_status_select",
+                placeholder="Search & select status..."
             )
+            st.session_state.sales_status = order_status
+            if order_status:
+                st.caption(f"✓ {len(order_status)} selected")
+        
+        # Category Filter - filtered based on all previous selections
         with filter_col4:
-            category_name = st.selectbox(
+            temp_df = sales_df.copy()
+            if restaurant:
+                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
+            if bd_name:
+                temp_df = temp_df[temp_df["bd_name"].isin(bd_name)]
+            if order_status:
+                temp_df = temp_df[temp_df["order_status"].isin(order_status)]
+            available_categories = sorted(temp_df["category"].dropna().unique().tolist())
+            
+            filtered_category = [x for x in st.session_state.sales_category if x in available_categories]
+            if not filtered_category and available_categories:
+                filtered_category = available_categories
+            
+            category_name = st.multiselect(
                 "Category",
-                ["All"] + sorted(sales_df["category"].dropna().unique().tolist()),
+                available_categories,
+                default=filtered_category,
+                key="sales_category_select",
+                placeholder="Search & select categories..."
             )
+            st.session_state.sales_category = category_name
+            if category_name:
+                st.caption(f"✓ {len(category_name)} selected")
 
         search_col1, search_col2, search_col3 = st.columns(3)
         with search_col1:
@@ -542,14 +732,14 @@ if st.session_state.get("authentication_status"):
             )
 
         filtered_sales = sales_df.copy()
-        if restaurant != "All":
-            filtered_sales = filtered_sales[filtered_sales["Restaurant name"] == restaurant]
-        if bd_name != "All":
-            filtered_sales = filtered_sales[filtered_sales["bd_name"] == bd_name]
-        if order_status != "All":
-            filtered_sales = filtered_sales[filtered_sales["order_status"] == order_status]
-        if category_name != "All":
-            filtered_sales = filtered_sales[filtered_sales["category"] == category_name]
+        if restaurant:
+            filtered_sales = filtered_sales[filtered_sales["Restaurant name"].isin(restaurant)]
+        if bd_name:
+            filtered_sales = filtered_sales[filtered_sales["bd_name"].isin(bd_name)]
+        if order_status:
+            filtered_sales = filtered_sales[filtered_sales["order_status"].isin(order_status)]
+        if category_name:
+            filtered_sales = filtered_sales[filtered_sales["category"].isin(category_name)]
 
         if len(date_range) == 2:
             start_date, end_date = date_range
@@ -587,7 +777,6 @@ if st.session_state.get("authentication_status"):
         ]
 
         st.markdown(
-            f"**Sales rows:** {len(filtered_sales)}  \\  \n"
             f"**Date range:** {date_range[0]} to {date_range[1]}  \\  \n"
             f"**Time range:** {start_time} to {end_time}"
         )
@@ -596,118 +785,144 @@ if st.session_state.get("authentication_status"):
             st.info("No sales data matches the selected filters.")
         else:
             summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
-            summary_col1.metric("Rows", len(filtered_sales))
-            summary_col2.metric("Total Item Price", f"{(filtered_sales['price'] * filtered_sales['quantity']).sum():,.2f} ETB")
-            summary_col3.metric("Total Quantity", f"{filtered_sales['quantity'].sum():,.0f}")
-            summary_col4.metric("Unique Products", filtered_sales['product'].nunique())
+            summary_col1.metric("Total Item Price", f"{(filtered_sales['price'] * filtered_sales['quantity']).sum():,.2f} ETB")
+            summary_col2.metric("Total Quantity", f"{filtered_sales['quantity'].sum():,.0f}")
+            summary_col3.metric("Unique Products", filtered_sales['product'].nunique())
 
-            chart_col1, chart_col2 = st.columns(2)
-            with chart_col1:
-                    revenue_by_restaurant = (
-                        filtered_sales.assign(restaurant_fee=filtered_sales['price'] * filtered_sales['quantity'])
-                        .groupby("Restaurant name", as_index=False)
-                        .agg(total_res_fee=("restaurant_fee", "sum"))
-                        .sort_values("total_res_fee", ascending=False)
-                        .head(20)
-                    )
-                    fig1 = px.bar(
-                        revenue_by_restaurant,
-                        x="total_res_fee",
-                        y="Restaurant name",
-                        orientation="h",
-                        title="Top Restaurants by Restaurant Fee",
-                        labels={"total_res_fee": "Restaurant Fee (ETB)", "Restaurant name": "Restaurant"},
-                    )
-                    fig1.update_layout(
-                        yaxis={'categoryorder': 'total ascending', 'automargin': True},
-                        xaxis_tickformat=",",
-                        height=700,
-                        autosize=False,
-                        width=1200,
-                        margin={'l': 180, 'r': 20, 't': 50, 'b': 50},
-                    )
-            st.markdown("<div style='overflow-x:auto'>", unsafe_allow_html=True)
-            st.plotly_chart(fig1, use_container_width=False, width=1200, config={"responsive": True})
-            st.markdown("</div>", unsafe_allow_html=True)
+        chart_col1, chart_col2 = st.columns(2)
 
-            with chart_col2:
-                product_counts = (
-                    
-                    filtered_sales.groupby("product", as_index=False)
-                    .agg(total_quantity=("quantity", "sum"))
-                    .sort_values("total_quantity", ascending=False)
-                    .head(20)
-                )
-                fig2 = px.bar(
-                    product_counts,
-                    x="total_quantity",
-                    y="product",
-                    orientation="h",
-                    title="Top Products by Quantity",
-                    labels={"total_quantity": "Quantity", "product": "Product"},
-                )
-                fig2.update_layout(
-                    yaxis={'categoryorder': 'total ascending', 'automargin': True},
-                    xaxis_tickformat=",",
-                    height=700,
-                    autosize=False,
-                    width=1200,
-                    margin={'l': 180, 'r': 20, 't': 50, 'b': 50},
-                )
-                st.markdown("<div style='overflow-x:auto'>", unsafe_allow_html=True)
-                st.plotly_chart(fig2, use_container_width=False, width=1200, config={"responsive": True})
-                st.markdown("</div>", unsafe_allow_html=True)
+        # ----------------------------------------------------
+        # Column 1: Top Restaurants by Restaurant Fee
+        # ----------------------------------------------------
+        with chart_col1:
+            st.subheader("Top Restaurants by Restaurant item price")
+            
+            revenue_by_restaurant = (
+                filtered_sales.assign(restaurant_item_price=filtered_sales['price'] * filtered_sales['quantity'])
+                .groupby("Restaurant name", as_index=False)
+                .agg(total_res_item_price=("restaurant_item_price", "sum"))
+                .sort_values("total_res_item_price", ascending=False)
+                .head(20)
+                .reset_index(drop=True)
+            )
+
+            # Display formatted table
+            st.dataframe(
+                revenue_by_restaurant,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Restaurant name": st.column_config.TextColumn("Restaurant"),
+                    "total_res_item_price": st.column_config.NumberColumn(
+                        "Restaurant Item price",
+                        format="%.2f ETB",
+                    ),
+                },
+            )
+
+            # CSV Download Button
+            csv_restaurants = revenue_by_restaurant.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label=" Download Top Restaurants CSV",
+                data=csv_restaurants,
+                file_name="top_restaurants_item_price.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key="download_top_restaurants"
+            )
+
+        # ----------------------------------------------------
+        # Column 2: Top Products by Quantity
+        # ----------------------------------------------------
+        with chart_col2:
+            st.subheader("Top Products by Quantity")
+            
+            product_counts = (
+                filtered_sales.groupby("product", as_index=False)
+                .agg(total_quantity=("quantity", "sum"))
+                .sort_values("total_quantity", ascending=False)
+                .head(20)
+                .reset_index(drop=True)
+            )
+
+            # Display formatted table with visual progress indicators
+            max_qty = int(product_counts["total_quantity"].max()) if not product_counts.empty else 100
+            st.dataframe(
+                product_counts,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "product": st.column_config.TextColumn("Product"),
+                    "total_quantity": st.column_config.ProgressColumn(
+                        "Total Quantity",
+                        format="%d",
+                        min_value=0,
+                        max_value=max_qty,
+                    ),
+                },
+            )
+
+            # CSV Download Button
+            csv_products = product_counts.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Download Top Products CSV",
+                data=csv_products,
+                file_name="top_products_quantity.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key="download_top_products"
+            )
 
             sales_trend = (
-                filtered_sales.assign(price=filtered_sales['price'] * filtered_sales['quantity'])
-                .groupby("Date", as_index=False)["price"]
+                filtered_sales.assign(price= filtered_sales['quantity'])
+                .groupby("Date", as_index=False)["quantity"]
                 .sum()
                 .sort_values("Date")
             )
-            fig3 = px.line(
-                sales_trend,
-                x="Date",
-                y="price",
-                title="Daily Sales Trend",
-                markers=True,
-                labels={"price": "Price"},
-            )
-            fig3.update_layout(hovermode="x unified")
-            st.plotly_chart(fig3, use_container_width=True)
+        fig3 = px.line(
+            sales_trend,
+            x="Date",
+            y="quantity",
+            title="Daily Sales Trend",
+            markers=True,
+            labels={"Quantity": "Price"},
+        )
+        fig3.update_layout(hovermode="x unified")
+        st.plotly_chart(fig3, use_container_width=True)
 
-            status_counts = (
-                filtered_sales.groupby("order_status", as_index=False)["ORDERS"]
-                .count()
-                .sort_values("ORDERS", ascending=False)
-            )
-            fig4 = px.pie(
-                status_counts,
-                names="order_status",
-                values="ORDERS",
-                title="Order Status Distribution",
-                hole=0.4,
-            )
-            st.plotly_chart(fig4, use_container_width=True)
+        status_counts = (
+            filtered_sales.groupby("order_status", as_index=False)["ORDERS"]
+            .count()
+            .sort_values("ORDERS", ascending=False)
+        )
+        fig4 = px.pie(
+            status_counts,
+            names="order_status",
+            values="ORDERS",
+            title="Order Status Distribution",
+            hole=0.4,
+        )
+        st.plotly_chart(fig4, use_container_width=True)
 
-            st.subheader("Filtered Sales Details")
-            display_columns = [
-                "ORDERS",
-                "created_at",
-                "Date",
-                "Time",
-                "Restaurant name",
-                "product",
-                "price",
-                "quantity",
-                "order_status",
-                "category",
-                "bd_name",
-            ]
-            display_columns = [col for col in display_columns if col in filtered_sales.columns]
-            st.dataframe(
-                filtered_sales.sort_values("created_at", ascending=False)[display_columns],
-                use_container_width=True,
-            )
+        st.subheader("Filtered Sales Details")
+        display_columns = [
+            "ORDERS",
+            "created_at",
+            "Date",
+            "Time",
+            "Restaurant name",
+            "product",
+            "price",
+            "quantity",
+            "order_status",
+            "category",
+            "bd_name",
+        ]
+        display_columns = [col for col in display_columns if col in filtered_sales.columns]
+        st.dataframe(
+            filtered_sales.sort_values("created_at", ascending=False)[display_columns],
+            use_container_width=True,
+        )
 
     elif category == "All Cancellations":
         st.subheader("All Cancellations")
@@ -722,16 +937,16 @@ if st.session_state.get("authentication_status"):
         if cancel_df.empty:
             st.warning("No cancellation data available. Use Refresh cancellations data to fetch a fresh dataset.")
 
-        username, roles, user_full_name = get_user_info_from_config()
+        username, roles, first_name = get_user_info_from_config()
         is_admin = "admin" in [role.lower() for role in roles]
         is_viewer = not is_admin and "viewer" in [role.lower() for role in roles]
 
-        if is_viewer and user_full_name:
+        if is_viewer and first_name:
             st.sidebar.markdown(f"**Role:** Viewer")
-            st.sidebar.markdown(f"**BD Name:** {user_full_name}")
-            cancel_df = cancel_df[cancel_df["BD"] == user_full_name]
+            st.sidebar.markdown(f"**BD Name:** {first_name}")
+            cancel_df = cancel_df[cancel_df["BD"] == first_name]
             if cancel_df.empty:
-                st.warning(f"No data available for BD Name '{user_full_name}'.")
+                st.warning(f"No data available for BD Name '{first_name}'.")
         elif is_admin:
             st.sidebar.markdown("**Role:** Admin")
         else:
@@ -748,39 +963,133 @@ if st.session_state.get("authentication_status"):
             max_value=max_date,
         )
 
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            restaurant = st.selectbox(
-                "Restaurant",
-                ["All"] + sorted(cancel_df["restaurant_name"].dropna().unique().tolist()),
-            )
-        with col2:
-            bd_options = ["All"] + sorted(cancel_df["BD"].dropna().unique().tolist())
-            if is_viewer and user_full_name:
-                if user_full_name not in bd_options:
-                    bd_options = [user_full_name] + bd_options
-                try:
-                    bd_index = bd_options.index(user_full_name)
-                except ValueError:
-                    bd_index = 0
+        # Initialize session state for cancellation filters
+        if "cancel_bd_name" not in st.session_state:
+            bd_opts = sorted(cancel_df["BD"].dropna().unique().tolist())
+            if is_viewer and first_name:
+                st.session_state.cancel_bd_name = [first_name] if first_name in bd_opts else bd_opts
             else:
-                bd_index = 0
+                st.session_state.cancel_bd_name = bd_opts
+        if "cancel_restaurant" not in st.session_state:
+            st.session_state.cancel_restaurant = sorted(cancel_df["restaurant_name"].dropna().unique().tolist())
+        if "cancel_team" not in st.session_state:
+            st.session_state.cancel_team = sorted(cancel_df["team"].dropna().unique().tolist())
+        if "cancel_category" not in st.session_state:
+            st.session_state.cancel_category = sorted(cancel_df["category"].dropna().unique().tolist())
+        if "cancel_reason" not in st.session_state:
+            st.session_state.cancel_reason = sorted(cancel_df["cancellation_reason"].dropna().unique().tolist())
 
-            bd_name = st.selectbox(
+        # Create 5 columns instead of 4 to accommodate the new filter
+        col1, col2, col3= st.columns(3)
+        
+        # 1. BD Name Filter (Moved to first so it dictates available restaurants)
+        with col1:
+            available_bd = sorted(cancel_df["BD"].dropna().unique().tolist())
+            filtered_bd = [x for x in st.session_state.cancel_bd_name if x in available_bd]
+            
+            if not filtered_bd and available_bd:
+                filtered_bd = available_bd if not is_viewer else [x for x in available_bd if x == first_name]
+            
+            bd_name = st.multiselect(
                 "BD Name",
-                bd_options,
-                index=bd_index,
+                available_bd,
+                default=filtered_bd,
+                key="cancel_bd_select",
+                placeholder="Select BD..."
             )
+            st.session_state.cancel_bd_name = bd_name
+            if bd_name:
+                st.caption(f"✓ {len(bd_name)} selected")
+
+        # 2. Restaurant Filter - filtered based on BD selection
+        with col2:
+            temp_df = cancel_df.copy()
+            if bd_name:
+                temp_df = temp_df[temp_df["BD"].isin(bd_name)]
+                
+            available_restaurants = sorted(temp_df["restaurant_name"].dropna().unique().tolist())
+            
+            # This logic automatically drops selected restaurants if they don't belong to the newly selected BD
+            filtered_rest = [x for x in st.session_state.cancel_restaurant if x in available_restaurants]
+            if not filtered_rest and available_restaurants:
+                filtered_rest = available_restaurants
+                
+            restaurant = st.multiselect(
+                "Restaurant",
+                available_restaurants,
+                default=filtered_rest,
+                key="cancel_restaurant_select",
+                placeholder="Select Rest..."
+            )
+            st.session_state.cancel_restaurant = restaurant
+            if restaurant:
+                st.caption(f"✓ {len(restaurant)} selected")
+        col4, col5 = st.columns(2)
+        # 3. Team Filter - filtered based on BD and Restaurant
         with col3:
-            team = st.selectbox(
+            if restaurant:
+                temp_df = temp_df[temp_df["restaurant_name"].isin(restaurant)]
+                
+            available_teams = sorted(temp_df["team"].dropna().unique().tolist())
+            
+            filtered_team = [x for x in st.session_state.cancel_team if x in available_teams]
+            if not filtered_team and available_teams:
+                filtered_team = available_teams
+            
+            team = st.multiselect(
                 "Team",
-                ["All"] + sorted(cancel_df["team"].dropna().unique().tolist()),
+                available_teams,
+                default=filtered_team,
+                key="cancel_team_select",
+                placeholder="Select teams..."
             )
+            st.session_state.cancel_team = team
+            if team:
+                st.caption(f"✓ {len(team)} selected")
+        
+        # 4. Category Filter - filtered based on previous selections
         with col4:
-            category_name = st.selectbox(
+            if team:
+                temp_df = temp_df[temp_df["team"].isin(team)]
+                
+            available_categories = sorted(temp_df["category"].dropna().unique().tolist())
+            
+            filtered_category = [x for x in st.session_state.cancel_category if x in available_categories]
+            if not filtered_category and available_categories:
+                filtered_category = available_categories
+            
+            category_name = st.multiselect(
                 "Category",
-                ["All"] + sorted(cancel_df["category"].dropna().unique().tolist()),
+                available_categories,
+                default=filtered_category,
+                key="cancel_category_select",
+                placeholder="Select cat..."
             )
+            st.session_state.cancel_category = category_name
+            if category_name:
+                st.caption(f"✓ {len(category_name)} selected")
+
+        # 5. Cancellation Reason Filter - filtered based on all previous selections
+        with col5:
+            if category_name:
+                temp_df = temp_df[temp_df["category"].isin(category_name)]
+                
+            available_reasons = sorted(temp_df["cancellation_reason"].dropna().unique().tolist())
+            
+            filtered_reason = [x for x in st.session_state.cancel_reason if x in available_reasons]
+            if not filtered_reason and available_reasons:
+                filtered_reason = available_reasons
+                
+            cancel_reason = st.multiselect(
+                "Reason",
+                available_reasons,
+                default=filtered_reason,
+                key="cancel_reason_select",
+                placeholder="Select Reason..."
+            )
+            st.session_state.cancel_reason = cancel_reason
+            if cancel_reason:
+                st.caption(f"✓ {len(cancel_reason)} selected")
 
         search_col1, search_col2 = st.columns(2)
         with search_col1:
@@ -788,28 +1097,21 @@ if st.session_state.get("authentication_status"):
                 "Search by restaurant, product, BD, or cancellation reason",
                 value="",
             )
-        with search_col2:
-            amount_min = float(cancel_df["order_amount"].min())
-            amount_max = float(cancel_df["order_amount"].max())
-            amount_range = st.slider(
-                "Order Amount Range",
-                min_value=amount_min,
-                max_value=amount_max,
-                value=(amount_min, amount_max),
-                step=max(1.0, (amount_max - amount_min) / 100),
-                format="%.2f",
-            )
 
+        # Apply ALL filters to the final dataframe
         filtered_cancel_df = cancel_df.copy()
-        if restaurant != "All":
-            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["restaurant_name"] == restaurant]
-        if bd_name != "All":
-            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["BD"] == bd_name]
-        if team != "All":
-            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["team"] == team]
-        if category_name != "All":
-            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["category"] == category_name]
+        if bd_name:
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["BD"].isin(bd_name)]
+        if restaurant:
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["restaurant_name"].isin(restaurant)]
+        if team:
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["team"].isin(team)]
+        if category_name:
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["category"].isin(category_name)]
+        if cancel_reason:
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["cancellation_reason"].isin(cancel_reason)]
 
+        # Apply Date Range
         if len(date_range) == 2:
             start_date, end_date = date_range
             filtered_cancel_df = filtered_cancel_df[
@@ -817,6 +1119,7 @@ if st.session_state.get("authentication_status"):
                 (filtered_cancel_df["Date"] <= end_date)
             ]
 
+        # Apply Search Query
         if reason_search:
             search_lower = reason_search.strip().lower()
             filtered_cancel_df = filtered_cancel_df[
@@ -826,51 +1129,42 @@ if st.session_state.get("authentication_status"):
                 filtered_cancel_df["BD"].str.lower().str.contains(search_lower, na=False)
             ]
 
-        filtered_cancel_df = filtered_cancel_df[
-            (filtered_cancel_df["order_amount"] >= amount_range[0]) &
-            (filtered_cancel_df["order_amount"] <= amount_range[1])
-        ]
-
         summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
-        summary_col1.metric("Rows", len(filtered_cancel_df))
-        summary_col2.metric("Total Order Amount", f"{filtered_cancel_df['order_amount'].sum():,.2f} ETB")
-        summary_col3.metric("Avg Cancel Time", f"{filtered_cancel_df['cancel_time'].mean():.1f} mins")
-        summary_col4.metric("Unique Products", filtered_cancel_df['product'].nunique())
+        summary_col1.metric("Quantity", len(filtered_cancel_df))
+        summary_col2.metric("Avg Cancel Time", f"{filtered_cancel_df['cancel_time'].mean():.1f} mins")
+        summary_col3.metric("Number of Order", filtered_cancel_df['id'].nunique())
 
         if filtered_cancel_df.empty:
             st.info("No cancellation data matches the selected filters.")
         else:
-            chart_col1, chart_col2 = st.columns(2)
-            with chart_col1:
-                reason_summary = (
-                    filtered_cancel_df.groupby("cancellation_reason", as_index=False)["id"]
-                    .count()
-                    .rename(columns={"id": "count"})
-                    .sort_values("count", ascending=False)
-                )
-                fig_reason = px.bar(
-                    reason_summary,
-                    x="count",
-                    y="cancellation_reason",
-                    orientation="h",
-                    title="Cancellation Reason Counts",
-                    labels={"count": "Count", "cancellation_reason": "Reason"},
-                )
-                st.plotly_chart(fig_reason, use_container_width=True)
+            
+            st.subheader("Cancellation Reason Counts")
+            reason_summary = (
+                filtered_cancel_df.groupby("cancellation_reason", as_index=False)["id"]
+                .count()
+                .rename(columns={"id": "count"})
+                .sort_values("count", ascending=False)
+            )
+            
+            # Replaced the bar chart with a table format
+            st.dataframe(
+                reason_summary, 
+                use_container_width=True, 
+                hide_index=True
+            )
 
-            with chart_col2:
-                team_summary = (
-                    filtered_cancel_df.groupby("team", as_index=False)["id"]
-                    .count()
-                    .rename(columns={"id": "count"})
-                )
-                fig_team = px.pie(
-                    team_summary,
-                    names="team",
-                    values="count",
-                    title="Cancellations by Team",
-                )
-                st.plotly_chart(fig_team, use_container_width=True)
+            team_summary = (
+                filtered_cancel_df.groupby("team", as_index=False)["id"]
+                .count()
+                .rename(columns={"id": "count"})
+            )
+            fig_team = px.pie(
+                team_summary,
+                names="team",
+                values="count",
+                title="Cancellations by Team",
+            )
+            st.plotly_chart(fig_team, use_container_width=True)
 
             st.subheader("Cancellation Details")
             display_columns = [
@@ -896,7 +1190,35 @@ if st.session_state.get("authentication_status"):
                 filtered_cancel_df.sort_values("created_at", ascending=False)[display_columns],
                 use_container_width=True,
             )
+    
 
+    # 3. Use user_roles in your condition
+    elif category == "Marketing Budget" and ("admin" in user_roles or "marketing" in user_roles):
+        st.subheader("Marketing Budget")
+        today = dt.date.today()
+        seven_days_ago = today - dt.timedelta(days=7)
+
+        date_range = st.date_input(
+            "Select Date Range",
+            value=(seven_days_ago, today)
+        )
+
+        if(len(date_range)==2):
+            start_date, end_date = date_range
+            df = fetch_marketing_budgets(start_date,end_date)
+
+            ##transpose the result
+            df_transposed = df.T
+
+            st.subheader("Result")
+            st.dataframe(df_transposed)
+        else:
+            st.info("Please select both a start and end date.")
+
+    # Your logic here
+        
+
+        
     # ---- your other categories (Call Center, Area Manager, etc.) go here ----
 
 elif st.session_state.get("authentication_status") is False:

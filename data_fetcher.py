@@ -36,7 +36,7 @@ def fetch_data_all_sales(start_date: str | None = None,end_date: str | None = No
           order_details.quantity,
           orders.order_status,
           categories.name AS category,
-          CONCAT(admins.f_name, '-', admins.l_name) AS bd_name
+          CONCAT(admins.f_name, ' ', admins.l_name) AS bd_name
         FROM
           orders
           JOIN restaurants ON restaurants.id = orders.restaurant_id

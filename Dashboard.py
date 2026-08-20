@@ -121,26 +121,6 @@ def load_cancellations_data():
     return df
 
 
-@st.cache_data
-def load_restaurant_data(seed=42):
-    
-    rng = np.random.default_rng(seed)
-
-    df = pd.DataFrame({
-        "Restaurant name": RESTAURANT_NAMES,
-        "BD NAME": rng.choice(BD_NAMES, len(RESTAURANT_NAMES)),
-        "commission_value": rng.integers(5_000, 60_000, len(RESTAURANT_NAMES)),
-        "ORDERS": rng.integers(20, 400, len(RESTAURANT_NAMES)),
-    })
-    return df
-
-
-def fetch_restaurant_data_live():
-    
-    seed = np.random.randint(0, 1_000_000)
-    return load_restaurant_data.__wrapped__(seed=seed)
-
-
 def get_user_info_from_config():
     username = st.session_state.get("username") or st.session_state.get("name")
     if not username:
@@ -244,8 +224,6 @@ if st.session_state.get("authentication_status"):
         if df.empty:
             st.warning("No delivery data available. Use Refresh delivered and sales data to fetch a fresh dataset.")
             
-
-        
         is_admin = "admin" in [role.lower() for role in roles]
         is_viewer = not is_admin and "viewer" in [role.lower() for role in roles]
 
@@ -276,13 +254,11 @@ if st.session_state.get("authentication_status"):
             max_value=max_date,
         )
         
-        # 2. CRITICAL FIX: Safely parse Streamlit's date_input state
+        # 2. Safely parse Streamlit's date_input state
         if len(date_range) == 2:
             start_date, end_date = date_range
         elif len(date_range) == 1:
-            # When user clicks the first date but hasn't clicked the second yet
-            start_date = date_range[0]
-            end_date = date_range[0]
+            start_date = end_date = date_range[0]
         else:
             start_date, end_date = min_date, max_date
 
@@ -292,116 +268,78 @@ if st.session_state.get("authentication_status"):
         prev_start_date = start_date - timedelta(days=num_days)
 
         st.subheader("Filters")
+        
+        # --- NEW EFFICIENT TRACKING: Slice base dataframes by date first ---
+        curr_base_df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
+        prev_base_df = df[(df["Date"] >= prev_start_date) & (df["Date"] <= prev_end_date)]
+
         col1, col2, col3, col4 = st.columns(4)
 
-        # 3. CRITICAL FIX: Base the dropdowns ONLY on the selected dates!
-        df_date_filtered = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
-        
-        # Initialize session states safely based on the date-filtered data
-        if "delivery_bd_name" not in st.session_state:
-            st.session_state.delivery_bd_name = sorted(df_date_filtered["BD NAME"].dropna().unique().tolist())
-        if "delivery_restaurant" not in st.session_state:
-            st.session_state.delivery_restaurant = sorted(df_date_filtered["Restaurant name"].dropna().unique().tolist())
-        if "delivery_team" not in st.session_state:
-            st.session_state.delivery_team = sorted(df_date_filtered["Team"].dropna().unique().tolist())
-        if "delivery_category" not in st.session_state:
-            st.session_state.delivery_category = sorted(df_date_filtered["Categories_Name"].dropna().unique().tolist())
-
-        # --- Dropdown UI Logic ---
+        # --- Dropdown UI Logic (Cascading) ---
+        # Each dropdown filters the available options for the next one
         with col1:
-            all_bds = sorted(df_date_filtered["BD NAME"].dropna().unique().tolist())
-            filtered_bd = [x for x in st.session_state.delivery_bd_name if x in all_bds]
-            if not filtered_bd and all_bds: filtered_bd = all_bds
-                
-            bd_name = st.multiselect("BD Name", all_bds, default=filtered_bd, key="delivery_bd_select", disabled=is_viewer)
-            st.session_state.delivery_bd_name = bd_name
+            all_bds = sorted(curr_base_df["BD NAME"].dropna().unique().tolist())
+            
+            # If viewer, lock their name as the default. Otherwise, default to empty (all data).
+            default_bd = [user_full_name] if is_viewer and user_full_name in all_bds else []
+            bd_name = st.multiselect("BD Name", all_bds, default=default_bd, disabled=is_viewer)
 
+        # Update available restaurants based on selected BDs
+        rest_cascade = curr_base_df[curr_base_df["BD NAME"].isin(bd_name)] if bd_name else curr_base_df
+        
         with col2:
-            temp_df = df_date_filtered.copy()
-            if bd_name: temp_df = temp_df[temp_df["BD NAME"].isin(bd_name)]
-            
-            available_restaurants = sorted(temp_df["Restaurant name"].dropna().unique().tolist())
-            filtered_restaurant = [x for x in st.session_state.delivery_restaurant if x in available_restaurants]
-            if not filtered_restaurant and available_restaurants: filtered_restaurant = available_restaurants
-                
-            restaurant = st.multiselect("Restaurant", available_restaurants, default=filtered_restaurant, key="delivery_restaurant_select")
-            st.session_state.delivery_restaurant = restaurant
+            available_restaurants = sorted(rest_cascade["Restaurant name"].dropna().unique().tolist())
+            restaurant = st.multiselect("Restaurant", available_restaurants)
 
+        # Update available teams based on selected restaurants
+        team_cascade = rest_cascade[rest_cascade["Restaurant name"].isin(restaurant)] if restaurant else rest_cascade
+        
         with col3:
-            if restaurant: temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
-            
-            available_teams = sorted(temp_df["Team"].dropna().unique().tolist())
-            filtered_team = [x for x in st.session_state.delivery_team if x in available_teams]
-            if not filtered_team and available_teams: filtered_team = available_teams
-            
-            team = st.multiselect("Team", available_teams, default=filtered_team, key="delivery_team_select")
-            st.session_state.delivery_team = team
+            available_teams = sorted(team_cascade["Team"].dropna().unique().tolist())
+            team = st.multiselect("Team", available_teams)
 
+        # Update available categories based on selected teams
+        cat_cascade = team_cascade[team_cascade["Team"].isin(team)] if team else team_cascade
+        
         with col4:
             import numpy as np
-            temp_df["Categories_Name"] = temp_df["Categories_Name"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
-            
-            available_categories = sorted(temp_df["Categories_Name"].unique().tolist())
-            # 2. CRITICAL FIX: Safely initialize session state if it doesn't exist
-            if "sales_category" not in st.session_state:
-                st.session_state.sales_category = available_categories
+            # Standardize empty categories to "Blank" for easier filtering
+            cat_cascade["Categories_Name"] = cat_cascade["Categories_Name"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
+            available_categories = sorted(cat_cascade["Categories_Name"].unique().tolist())
+            category_name = st.multiselect("Category", available_categories)
 
-            filtered_category = [x for x in st.session_state.sales_category if x in available_categories]
-            if not filtered_category and available_categories:
-                filtered_category = available_categories
+        # --- Unified Filter Function ---
+        # This guarantees identical logic is applied to both current and previous dataframes
+        def apply_dynamic_filters(data_df, bds, rests, teams, cats):
+            filtered = data_df.copy()
             
-            # 3. CRITICAL FIX: Use the 'filtered_category' variable you just calculated for the default!
-            category_name = st.multiselect(
-                "Category",
-                options=available_categories,
-                default=filtered_category,
-                key="sales_category_select_v2"  # <-- ADD _v2 HERE
-            )
-            st.session_state.sales_category = category_name
-
-        # --- Final Dataframe Creation ---
-        # Apply the selected dropdowns to the ENTIRE dataframe first
-        master_filtered_df = df.copy()
-        
-
-        if bd_name:
-            master_filtered_df = master_filtered_df[master_filtered_df["BD NAME"].isin(bd_name)]
-            
-        if restaurant:
-            master_filtered_df = master_filtered_df[master_filtered_df["Restaurant name"].isin(restaurant)]
-            
-        if team:
-            master_filtered_df = master_filtered_df[master_filtered_df["Team"].isin(team)]
-            
-        if category_name:
-            if "Blank" in category_name:
-                # Remove "Blank" from the list of words to search for
-                valid_cats = [c for c in category_name if c != "Blank"]
+            if bds:
+                filtered = filtered[filtered["BD NAME"].isin(bds)]
+            if rests:
+                filtered = filtered[filtered["Restaurant name"].isin(rests)]
+            if teams:
+                filtered = filtered[filtered["Team"].isin(teams)]
                 
-                # Match the valid categories OR any rows that are NaN/Empty
-                master_filtered_df = master_filtered_df[
-                    master_filtered_df["Categories_Name"].isin(valid_cats) | 
-                    master_filtered_df["Categories_Name"].isna() | 
-                    (master_filtered_df["Categories_Name"] == "") |
-                    (master_filtered_df["Categories_Name"] == " ")
-                ]
-            else:
-                # Normal filtering if "Blank" is not selected
-                master_filtered_df = master_filtered_df[master_filtered_df["Categories_Name"].isin(category_name)]
-            
+            if cats:
+                # Ensure the target dataframe also has blanks handled before filtering
+                filtered["Categories_Name"] = filtered["Categories_Name"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
+                
+                if "Blank" in cats:
+                    valid_cats = [c for c in cats if c != "Blank"]
+                    filtered = filtered[
+                        filtered["Categories_Name"].isin(valid_cats) | 
+                        (filtered["Categories_Name"] == "Blank")
+                    ]
+                else:
+                    filtered = filtered[filtered["Categories_Name"].isin(cats)]
+                    
+            return filtered
 
-        
-        # Split into Current Period and Previous Period for metrics
-        filtered_df = master_filtered_df[
-            (master_filtered_df["Date"] >= start_date) & 
-            (master_filtered_df["Date"] <= end_date)
-        ]
-        
-        prev_df = master_filtered_df[
-            (master_filtered_df["Date"] >= prev_start_date) & 
-            (master_filtered_df["Date"] <= prev_end_date)
-        ]
+        # Apply the exact same filter arrays to both dataframes
+        filtered_df = apply_dynamic_filters(curr_base_df, bd_name, restaurant, team, category_name)
+        prev_df = apply_dynamic_filters(prev_base_df, bd_name, restaurant, team, category_name)
 
+        # --- Metrics Display Logic ---
         def get_metric_delta(curr_val: float, prev_val: float) -> str:
             if prev_val == 0:
                 return "+100.0%" if curr_val > 0 else ("0.0%" if curr_val == 0 else "-100.0%")
@@ -409,36 +347,28 @@ if st.session_state.get("authentication_status"):
             return f"{pct_change:+.1f}% vs prev {prev_val} period"
         
         def compute_metric(col_name, agg_type="sum", currency="ETB"):
-            # Check if column exists to prevent KeyErrors
             col_exists_curr = col_name in filtered_df.columns
             col_exists_prev = col_name in prev_df.columns
 
             if agg_type == "nunique":
-                # Count unique values (Best for counting distinct orders)
                 curr_val = filtered_df[col_name].nunique() if not filtered_df.empty and col_exists_curr else 0
                 prev_val = prev_df[col_name].nunique() if not prev_df.empty and col_exists_prev else 0
                 val_str = f"{curr_val:,}"
-                
             elif agg_type == "sum":
-                # Sum the values (Best for currency and financial metrics)
                 curr_val = filtered_df[col_name].sum() if not filtered_df.empty and col_exists_curr else 0.0
                 prev_val = prev_df[col_name].sum() if not prev_df.empty and col_exists_prev else 0.0
                 val_str = f"{curr_val:,.2f} {currency}"
-                
             else:
                 curr_val, prev_val = 0, 0
                 val_str = "0"
 
-            # Always calculate delta, even if prev_df is technically empty (so 0 to X shows as +100%)
             delta_str = get_metric_delta(curr_val, prev_val)
             return val_str, delta_str
 
-        # --- Metrics Display ---
         st.subheader("Performance Overview")
         
-        # Metric Definitions: (Label, Column Name, Aggregation Type)
         metrics_config = [
-            ("Total Orders", "ORDERS", "nunique"),  # Make sure "ORDERS" matches your exact dataframe column name!
+            ("Total Orders", "ORDERS", "nunique"), 
             ("Commission Value", "commission_value", "sum"),
             ("Restaurant Fee", "restaurant_fee", "sum"),
             ("Restaurant Discount", "restaurant_discount", "sum"),
@@ -448,7 +378,6 @@ if st.session_state.get("authentication_status"):
             ("Coupon Discount Amount", "coupon_discount_amount", "sum"),
         ]
 
-        # Render dynamically in a 3-column grid
         cols = st.columns(3)
         for idx, (label, col_name, agg_type) in enumerate(metrics_config):
             val_str, delta_str = compute_metric(col_name=col_name, agg_type=agg_type)
@@ -456,23 +385,8 @@ if st.session_state.get("authentication_status"):
                 label=label,
                 value=val_str,
                 delta=delta_str,
-                delta_color="normal"  # Green for positive, Red for negative
+                delta_color="normal" 
             )
-
-        #
-        
-        
-        chart_col1, chart_col2 = st.columns(2)
-
-        # with chart_col1:
-        #     show_bar_table(
-        #         filtered_df,
-        #         group_col="BD NAME",
-        #         value_col="commission_value",
-        #         title="BD Performance Commission Valu",
-        #         show_rank=True,
-        #     )
-
 
         show_bar_table(
             filtered_df,
@@ -569,9 +483,8 @@ if st.session_state.get("authentication_status"):
         if sales_df.empty:
             st.warning("No sales data available. Use Refresh delivered and sales data to fetch a fresh dataset.")
 
-        username, roles, user_full_name = get_user_info_from_config()
-        is_admin = "admin" in [role.lower() for role in roles]
-        is_viewer = not is_admin and "viewer" in [role.lower() for role in roles]
+        is_admin = "admin" in [role.lower() for role in user_roles]
+        is_viewer = not is_admin and "viewer" in [role.lower() for role in user_roles]
 
         if is_viewer and user_full_name:
             st.sidebar.markdown(f"**Role:** Viewer")
@@ -584,16 +497,39 @@ if st.session_state.get("authentication_status"):
         else:
             st.sidebar.markdown("**Role:** Unknown")
 
-        min_date = sales_df["Date"].min()
-        max_date = sales_df["Date"].max()
+        # ---------------------------------------------------------
+        # TASK 1: CRITICAL FIX FOR DATE ERROR
+        # Safely convert to dates, coerce errors to NaT, and drop to find min/max
+        # ---------------------------------------------------------
+        import datetime as dt  # Make sure you have this import!
+        
+        sales_df["Date"] = pd.to_datetime(sales_df["Date"], errors="coerce").dt.date
+        valid_dates = sales_df["Date"].dropna()
+
+        if valid_dates.empty:
+            today = dt.date.today()
+            min_date = today - dt.timedelta(days=30)
+            max_date = today
+        else:
+            min_date = valid_dates.min()
+            max_date = valid_dates.max()
 
         st.title("beU Sales Dashboard")
+
         date_range = st.date_input(
             "Select Date Range",
             value=(min_date, max_date),
             min_value=min_date,
             max_value=max_date,
         )
+
+        # Safely parse the selected date range
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+        elif len(date_range) == 1:
+            start_date = end_date = date_range[0]
+        else:
+            start_date, end_date = min_date, max_date
 
         start_time, end_time = st.slider(
             "Select Time Range",
@@ -603,116 +539,79 @@ if st.session_state.get("authentication_status"):
             format="HH:mm",
         )
 
-        # Initialize session state for sales filters
-        if "sales_restaurant" not in st.session_state:
-            st.session_state.sales_restaurant = sorted(sales_df["Restaurant name"].dropna().unique().tolist())
-        if "sales_bd_name" not in st.session_state:
-            bd_opts = sorted(sales_df["bd_name"].dropna().unique().tolist())
-            if is_viewer and user_full_name:
-                st.session_state.sales_bd_name = [user_full_name] if user_full_name in bd_opts else bd_opts
-            else:
-                st.session_state.sales_bd_name = bd_opts
-        if "sales_status" not in st.session_state:
-            st.session_state.sales_status = sorted(sales_df["order_status"].dropna().unique().tolist())
-        if "sales_category" not in st.session_state:
-            st.session_state.sales_category = sorted(sales_df["category"].dropna().unique().tolist())
+        # ---------------------------------------------------------
+        # TASK 2: DATE-FIRST FILTERING & CASCADING DROPDOWNS
+        # ---------------------------------------------------------
+        
+        # 1. Filter the entire dataset by the selected date FIRST
+        curr_base_df = sales_df[(sales_df["Date"] >= start_date) & (sales_df["Date"] <= end_date)]
 
         filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
-        
-        # Restaurant Filter
+
+        # 2. Build cascading dropdowns from the date-filtered data
         with filter_col1:
-            all_restaurants = sorted(sales_df["Restaurant name"].dropna().unique().tolist())
-            restaurant = st.multiselect(
-                "Restaurant",
-                all_restaurants,
-                default=st.session_state.sales_restaurant,
-                key="sales_restaurant_select",
-                placeholder="Search & select restaurants..."
-            )
-            st.session_state.sales_restaurant = restaurant
-            if restaurant:
-                st.caption(f"✓ {len(restaurant)} selected")
+            bd_opts = sorted(curr_base_df["bd_name"].dropna().unique().tolist())
+            
+            # Auto-select user if viewer, otherwise leave blank
+            default_bd = [user_full_name] if is_viewer and user_full_name in bd_opts else []
+            bd_name = st.multiselect("BD Name", bd_opts, default=default_bd, disabled=is_viewer)
+
+        # Cascade BD to Restaurant
+        rest_cascade = curr_base_df[curr_base_df["bd_name"].isin(bd_name)] if bd_name else curr_base_df
         
-        # BD Name Filter - filtered based on restaurant selection
         with filter_col2:
-            temp_df = sales_df.copy()
-            if restaurant:
-                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
-            available_bd = sorted(temp_df["bd_name"].dropna().unique().tolist())
-            
-            filtered_bd = [x for x in st.session_state.sales_bd_name if x in available_bd]
-            if not filtered_bd and available_bd:
-                filtered_bd = available_bd if not is_viewer else [x for x in available_bd if x == user_full_name]
-            
-            bd_name = st.multiselect(
-                "BD Name",
-                available_bd,
-                default=filtered_bd,
-                key="sales_bd_select",
-                placeholder="Search & select BD names..."
-            )
-            st.session_state.sales_bd_name = bd_name
-            if bd_name:
-                st.caption(f"✓ {len(bd_name)} selected")
+            available_restaurants = sorted(rest_cascade["Restaurant name"].dropna().unique().tolist())
+            restaurant = st.multiselect("Restaurant", available_restaurants)
+
+        # Cascade Restaurant to Status
+        status_cascade = rest_cascade[rest_cascade["Restaurant name"].isin(restaurant)] if restaurant else rest_cascade
         
-        # Order Status Filter - filtered based on restaurant and BD selection
         with filter_col3:
-            temp_df = sales_df.copy()
-            if restaurant:
-                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
-            if bd_name:
-                temp_df = temp_df[temp_df["bd_name"].isin(bd_name)]
-            available_status = sorted(temp_df["order_status"].dropna().unique().tolist())
-            
-            filtered_status = [x for x in st.session_state.sales_status if x in available_status]
-            if not filtered_status and available_status:
-                filtered_status = available_status
-            
-            order_status = st.multiselect(
-                "Order Status",
-                available_status,
-                default=filtered_status,
-                key="sales_status_select",
-                placeholder="Search & select status..."
-            )
-            st.session_state.sales_status = order_status
-            if order_status:
-                st.caption(f"✓ {len(order_status)} selected")
+            # Assuming the column is 'order_status' based on your session_state init
+            available_statuses = sorted(status_cascade["order_status"].dropna().unique().tolist())
+            order_status = st.multiselect("Status", available_statuses)
+
+        # Cascade Status to Category
+        cat_cascade = status_cascade[status_cascade["order_status"].isin(order_status)] if order_status else status_cascade
         
-        # Category Filter - filtered based on all previous selections
         with filter_col4:
-            temp_df = sales_df.copy()
-            if restaurant:
-                temp_df = temp_df[temp_df["Restaurant name"].isin(restaurant)]
-            if bd_name:
-                temp_df = temp_df[temp_df["bd_name"].isin(bd_name)]
-            if order_status:
-                temp_df = temp_df[temp_df["order_status"].isin(order_status)]
-
-            # 1. CRITICAL FIX: Catch empty strings AND NaNs, and convert them to "Blank"
-            # Replace empty strings or spaces with NaN first, then fill all NaNs with "Blank"
+            # Assuming the column is 'category' based on your session_state init
             import numpy as np
-            temp_df["category"] = temp_df["category"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
-            
-            available_categories = sorted(temp_df["category"].unique().tolist())
-            # 2. CRITICAL FIX: Safely initialize session state if it doesn't exist
-            if "sales_category" not in st.session_state:
-                st.session_state.sales_category = available_categories
+            cat_cascade["category"] = cat_cascade["category"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
+            available_categories = sorted(cat_cascade["category"].unique().tolist())
+            category_name = st.multiselect("Category", available_categories)
 
-            filtered_category = [x for x in st.session_state.sales_category if x in available_categories]
-            if not filtered_category and available_categories:
-                filtered_category = available_categories
-            
-            # 3. CRITICAL FIX: Use the 'filtered_category' variable you just calculated for the default!
-            category_name = st.multiselect(
-                "Category",
-                options=available_categories,
-                default=filtered_category,
-                key="sales_category_select_v2"  # <-- ADD _v2 HERE
-            )
-            st.session_state.sales_category = category_name
-            if category_name:
-                st.caption(f"✓ {len(category_name)} selected")
+        # ---------------------------------------------------------
+        # FINAL APPLICATION OF ALL FILTERS
+        # ---------------------------------------------------------
+        def apply_sales_filters(data_df, bds, rests, statuses, cats):
+            filtered = data_df.copy()
+            if bds:
+                filtered = filtered[filtered["bd_name"].isin(bds)]
+            if rests:
+                filtered = filtered[filtered["Restaurant name"].isin(rests)]
+            if statuses:
+                filtered = filtered[filtered["order_status"].isin(statuses)]
+            if cats:
+                filtered["category"] = filtered["category"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
+                if "Blank" in cats:
+                    valid_cats = [c for c in cats if c != "Blank"]
+                    filtered = filtered[
+                        filtered["category"].isin(valid_cats) | 
+                        (filtered["category"] == "Blank")
+                    ]
+                else:
+                    filtered = filtered[filtered["category"].isin(cats)]
+            return filtered
+
+        # Your final dataframe ready for charts/tables
+        final_filtered_df = apply_sales_filters(curr_base_df, bd_name, restaurant, order_status, category_name)
+
+        # Restaurant Filter
+        # --- Make sure base_df is defined right before this block! ---
+        # e.g., base_df = sales_df[(sales_df["Date"] >= start_date) & (sales_df["Date"] <= end_date)]
+
+        
 
         search_col1, search_col2, search_col3 = st.columns(3)
 
@@ -721,9 +620,20 @@ if st.session_state.get("authentication_status"):
                 "Search by product, restaurant, category, or BD name",
                 value="",
             )
+            
         with search_col2:
-            price_min = float(sales_df["price"].min())
-            price_max = float(sales_df["price"].max())
+            # 1. CRITICAL FIX: Safely calculate price avoiding NaN errors
+            valid_prices = sales_df["price"].dropna()
+            if valid_prices.empty:
+                price_min, price_max = 0.0, 100.0
+            else:
+                price_min = float(valid_prices.min())
+                price_max = float(valid_prices.max())
+                
+            # Prevent slider crash if all items cost the exact same amount
+            if price_min == price_max:
+                price_max = price_min + 1.0
+
             price_range = st.slider(
                 "Price Range",
                 min_value=price_min,
@@ -732,9 +642,20 @@ if st.session_state.get("authentication_status"):
                 step=max(0.01, (price_max - price_min) / 100),
                 format="%.2f",
             )
+            
         with search_col3:
-            qty_min = int(sales_df["quantity"].min())
-            qty_max = int(sales_df["quantity"].max())
+            # 2. CRITICAL FIX: Safely calculate quantity avoiding NaN errors
+            valid_qtys = sales_df["quantity"].dropna()
+            if valid_qtys.empty:
+                qty_min, qty_max = 0, 100
+            else:
+                qty_min = int(valid_qtys.min())
+                qty_max = int(valid_qtys.max())
+                
+            # Prevent slider crash if all quantities are exactly the same
+            if qty_min == qty_max:
+                qty_max = qty_min + 1
+
             quantity_range = st.slider(
                 "Quantity Range",
                 min_value=qty_min,
@@ -783,6 +704,7 @@ if st.session_state.get("authentication_status"):
                     (filtered_sales["Time"] >= start_time) |
                     (filtered_sales["Time"] <= end_time)
                 ]
+                
         if item_search:
             item_lower = item_search.strip().lower()
             filtered_sales = filtered_sales[

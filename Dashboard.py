@@ -464,23 +464,23 @@ if st.session_state.get("authentication_status"):
         
         chart_col1, chart_col2 = st.columns(2)
 
-        with chart_col1:
-            show_bar_table(
-                filtered_df,
-                group_col="BD NAME",
-                value_col="commission_value",
-                title="BD Performance Commission Valu",
-                show_rank=True,
-            )
+        # with chart_col1:
+        #     show_bar_table(
+        #         filtered_df,
+        #         group_col="BD NAME",
+        #         value_col="commission_value",
+        #         title="BD Performance Commission Valu",
+        #         show_rank=True,
+        #     )
 
-        with chart_col2:
-            show_bar_table(
-                filtered_df,
-                group_col="Restaurant name",
-                value_col="beu_discount_on_food",
-                title="Restaurant beU Discount On Food",
-                show_rank=False,
-            )
+
+        show_bar_table(
+            filtered_df,
+            group_col="Restaurant name",
+            value_col="beu_discount_on_food",
+            title="Restaurant beU Discount On Food",
+            show_rank=False,
+        )
 
         st.title("Restaurant BD Performance")
 
@@ -521,18 +521,15 @@ if st.session_state.get("authentication_status"):
         # This will display the actual list of available columns on your dashboard
         # st.write("Actual columns in rest_df:", rest_df.columns.tolist())
         cols_to_show = ["ORDERS", "Restaurant name","created_at","restaurant_discount","restaurant_discount_on_food","restaurant_fee","BD NAME"]
-        st.header("Restaurnt Sales Report")
+        st.header("Restaurant Sales Report")
         st.dataframe(filtered_df[cols_to_show])
-        show_bar_table(
-            filtered_df.groupby(["BD NAME"], as_index=False)
-                            ["ORDERS"]
-                            .count()
-                            .sort_values(["BD NAME"]),
-            group_col="BD NAME",
-            value_col="ORDERS",
-            title="BD Performance Total Delivered Order",
-            show_rank=True,
-        )
+
+        samp_df = filtered_df.groupby(["BD NAME"], as_index=False).agg(
+                                            ORDERS=("ORDERS", "count"),
+                                            TOTAL_COMMISSION=("commission_value", "sum") # Replace with your actual commission column name
+                                        ).sort_values(["BD NAME"])
+        st.dataframe(samp_df)
+
         if not filtered_df.empty:
             team_commission = (
                 filtered_df.groupby(["Date", "Team"], as_index=False)

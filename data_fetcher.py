@@ -76,17 +76,18 @@ def fetch_data_all_sales(start_date: str | None = None,end_date: str | None = No
 
 
 def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | None = None):
-  # Use full datetimes (current date + time) so we include up-to-the-second records.
-  if end_date is None:
-    end_date = pd.Timestamp.now()
-  else:
-    end_date = pd.to_datetime(end_date)
+    # Use full datetimes (current date + time) so we include up-to-the-second records.
+    if end_date is None:
+        end_date = pd.Timestamp.now()
+    else:
+        end_date = pd.to_datetime(end_date)
 
-  if start_date is None:
-    start_date = end_date - pd.DateOffset(months=2)
-  else:
-    start_date = pd.to_datetime(start_date)
+    if start_date is None:
+        start_date = end_date - pd.DateOffset(months=2)
+    else:
+        start_date = pd.to_datetime(start_date)
 
+    # Fixed Indentation here
     query = text("""
         SELECT
           orders.id,
@@ -112,17 +113,18 @@ def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | 
           JOIN restaurants res ON res.id = orders.restaurant_id
           JOIN order_details or_detail ON or_detail.order_id = orders.id
           LEFT JOIN cancellation_reasons can_reason ON can_reason.id = orders.cancelation_reason
-          JOIN categories ON categories.id = res.category_id
-          JOIN admins ON admins.id = res.business_developer_id
+          LEFT JOIN categories ON categories.id = res.category_id            -- Changed to LEFT JOIN
+          LEFT JOIN admins ON admins.id = res.business_developer_id          -- Changed to LEFT JOIN
           LEFT JOIN food ON or_detail.food_id = food.id
         WHERE
           orders.created_at BETWEEN :start_date AND :end_date
           AND orders.order_status = 'canceled'
           AND orders.restaurant_id NOT IN (999, 1329)
-          AND (
-            can_reason.message LIKE '(Restaurant)%'
-            OR orders.cancelation_reason IN ('C5', 'C2', 'C7', 'C8', 'R15')
-          )
+          -- REMOVED the strict cancellation reason filter to fetch ALL canceled orders
+          -- AND (
+          --   can_reason.message LIKE '(Restaurant)%'
+          --   OR orders.cancelation_reason IN ('C5', 'C2', 'C7', 'C8', 'R15')
+          -- )
         GROUP BY
           or_detail.id
         ORDER BY
@@ -130,19 +132,20 @@ def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | 
     """)
 
     with create_db_engine().connect() as connection:
-      chunks = pd.read_sql(
-        query,
-        connection,
-        params={
-          "start_date": start_date.strftime('%Y-%m-%d %H:%M:%S'),
-          "end_date": end_date.strftime('%Y-%m-%d %H:%M:%S'),
-        },
-        chunksize=50000,
-      )
-      result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+        chunks = pd.read_sql(
+            query,
+            connection,
+            params={
+                "start_date": start_date.strftime('%Y-%m-%d %H:%M:%S'),
+                "end_date": end_date.strftime('%Y-%m-%d %H:%M:%S'),
+            },
+            chunksize=50000,
+        )
+        # Handle generator output from chunksize safely
+        result = pd.concat(chunks, ignore_index=True) if chunks else pd.DataFrame()
 
     if not result.empty:
-      _safe_write_csv(result, CANCELLATIONS_CSV_PATH)
+        _safe_write_csv(result, CANCELLATIONS_CSV_PATH)
 
     return result
 
@@ -374,7 +377,7 @@ def _safe_write_csv(df: pd.DataFrame, path: str) -> str:
         return path
       except PermissionError:
         # target locked; fallback
-        ts_path = f"{path}.{int(time.time())}.csv"
+        ts_path = f"{path}.csv"
         try:
           os.replace(tmp_name, ts_path)
           logging.warning(f"Could not replace {path}; wrote fallback {ts_path}")

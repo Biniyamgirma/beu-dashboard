@@ -45,13 +45,6 @@ if current_user and current_user in config.get("credentials", {}).get("usernames
     user_roles = config["credentials"]["usernames"][current_user].get("roles", [])
 
 
-@st.cache_data
-def restaurant_bd_map():
-    """Fixed Restaurant name -> BD NAME lookup (deterministic seed)."""
-    rng = np.random.default_rng(7)
-    bd_for_restaurant = rng.choice(BD_NAMES, len(RESTAURANT_NAMES))
-    return dict(zip(RESTAURANT_NAMES, bd_for_restaurant))
-
 
 @st.cache_data
 def load_data():
@@ -211,13 +204,15 @@ if st.session_state.get("authentication_status"):
 
     if category == "ALL Delivered":
         st.subheader("ALL Delivered")
-
-        if st.sidebar.button("Refresh delivered and sales data"):
-            st.cache_data.clear()
-            fetch_data_all_delivered()
-            fetch_data_all_sales()
-            st.success("Fetched latest 2-month data and updated delivered_data.csv and sales_data.csv.")
-            st.rerun()
+        is_admin = "admin" in [role.lower() for role in user_roles]
+        if is_admin:
+                            
+            if st.sidebar.button("Refresh delivered and sales data"):
+                st.cache_data.clear()
+                fetch_data_all_delivered()
+                fetch_data_all_sales()
+                st.success("Fetched latest 2-month data and updated delivered_data.csv and sales_data.csv.")
+                st.rerun()
 
         df = load_data()
 
@@ -471,13 +466,14 @@ if st.session_state.get("authentication_status"):
 
     elif category == "All Sales":
         st.subheader("All Sales")
-
-        if st.sidebar.button("Refresh delivered and sales data"):
-            st.cache_data.clear()
-            fetch_data_all_delivered()
-            fetch_data_all_sales()
-            st.success("Fetched latest 2-month data and updated delivered_data.csv and sales_data.csv.")
-            st.rerun()
+        is_admin = "admin" in [role.lower() for role in user_roles]
+        if is_admin:
+            if st.sidebar.button("Refresh delivered and sales data"):
+                st.cache_data.clear()
+                fetch_data_all_delivered()
+                fetch_data_all_sales()
+                st.success("Fetched latest 2-month data and updated delivered_data.csv and sales_data.csv.")
+                st.rerun()
 
         sales_df = load_sales_data()
         if sales_df.empty:
@@ -871,12 +867,13 @@ if st.session_state.get("authentication_status"):
 
     elif category == "All Cancellations":
         st.subheader("All Cancellations")
-
-        if st.sidebar.button("Refresh cancellations data"):
-            st.cache_data.clear()
-            fetch_data_all_cancellations()
-            st.success("Fetched latest 2-month cancellation data and updated cancellations_data.csv.")
-            st.rerun()
+        is_admin = "admin" in [role.lower() for role in user_roles]
+        if is_admin:
+            if st.sidebar.button("Refresh cancellations data"):
+                        st.cache_data.clear()
+                        fetch_data_all_cancellations()
+                        st.success("Fetched latest 2-month cancellation data and updated cancellations_data.csv.")
+                        st.rerun()
 
         cancel_df = load_cancellations_data()
         if cancel_df.empty:

@@ -46,6 +46,8 @@ if current_user and current_user in config.get("credentials", {}).get("usernames
 
 
 
+
+
 @st.cache_data
 def load_data():
     if os.path.exists(CSV_PATH):
@@ -221,11 +223,21 @@ if st.session_state.get("authentication_status"):
             
         is_admin = "admin" in [role.lower() for role in roles]
         is_viewer = not is_admin and "viewer" in [role.lower() for role in roles]
+        lower_roles = [role.lower() for role in roles]
+        is_team_leader = not is_admin and ("team 1" in lower_roles or "team 2" in lower_roles)
+        if is_team_leader:
+
+            # Determine exactly which team they belong to and filter
+            if "team 1" in lower_roles:
+                df = df[df["Team"] == "Team 1"]
+            elif "team 2" in lower_roles:
+                df = df[df["Team"] == "Team 2"]
 
         if is_viewer and user_full_name:
             st.sidebar.markdown(f"**Role:** Viewer")
             st.sidebar.markdown(f"**BD Name:** {user_full_name}")
             df = df[df["BD NAME"] == user_full_name]
+
             if df.empty:
                 st.warning(f"No data available for BD Name '{user_full_name}'.")
                 
@@ -234,11 +246,16 @@ if st.session_state.get("authentication_status"):
         else:
             st.sidebar.markdown("**Role:** Unknown")
 
-        # 1. CRITICAL FIX: Ensure 'Date' is strictly a Python date object for safe comparison
-        df["Date"] = pd.to_datetime(df["Date"]).dt.date
-
-        min_date = df["Date"].min()
-        max_date = df["Date"].max()
+       # 1. CRITICAL FIX: Safely extract dates, handling empty dataframes and strict typing
+        if not df.empty:
+            df["Date"] = pd.to_datetime(df["Date"]).dt.date
+            # Ensure the extracted min/max are strictly native Python date objects
+            min_date = pd.to_datetime(df["Date"]).min().date()
+            max_date = pd.to_datetime(df["Date"]).max().date()
+        else:
+            # Safe fallback if the dataframe is empty (e.g., due to BD/Team filters)
+            min_date = dt.date.today()
+            max_date = dt.date.today()
 
         st.title("beU Delivery Dashboard")
         
@@ -269,7 +286,10 @@ if st.session_state.get("authentication_status"):
         prev_base_df = df[(df["Date"] >= prev_start_date) & (df["Date"] <= prev_end_date)]
 
         col1, col2, col3, col4 = st.columns(4)
-
+        bd_name = []
+        restaurant = []
+        team = []
+        category_name = []
         # --- Dropdown UI Logic (Cascading) ---
         # Each dropdown filters the available options for the next one
         with col1:
@@ -287,13 +307,30 @@ if st.session_state.get("authentication_status"):
             restaurant = st.multiselect("Restaurant", available_restaurants)
 
         # Update available teams based on selected restaurants
+        team = team[team["Restaurant name"].isin(restaurant)] if restaurant else team
+        
+        # Update available teams based on selected restaurants
+        # [FIX 1] Create 'team_cascade' from 'rest_cascade' (do NOT overwrite 'team')
         team_cascade = rest_cascade[rest_cascade["Restaurant name"].isin(restaurant)] if restaurant else rest_cascade
         
         with col3:
+            # [FIX 2] Extract available teams from the dataframe 'team_cascade'
             available_teams = sorted(team_cascade["Team"].dropna().unique().tolist())
-            team = st.multiselect("Team", available_teams)
+
+            if is_team_leader:
+                # Determine exactly which team they belong to and filter
+                if "team 1" in lower_roles:
+                    # 'team' becomes the list of selected items from the multiselect
+                    team = st.multiselect("Team", available_teams, default=["Team 1"], disabled=True)
+                elif "team 2" in lower_roles:
+                    team = st.multiselect("Team", available_teams, default=["Team 2"], disabled=True)
+            else:
+                # [FIX 3] Ensure admins/viewers still get the dropdown to select a team
+                team = st.multiselect("Team", available_teams)
+            
 
         # Update available categories based on selected teams
+        # [FIX 4] Filter 'team_cascade' using the 'team' list, creating 'cat_cascade'
         cat_cascade = team_cascade[team_cascade["Team"].isin(team)] if team else team_cascade
         
         with col4:
@@ -481,11 +518,18 @@ if st.session_state.get("authentication_status"):
 
         is_admin = "admin" in [role.lower() for role in user_roles]
         is_viewer = not is_admin and "viewer" in [role.lower() for role in user_roles]
-
+        lower_roles = [role.lower() for role in roles]
+        is_team_leader = not is_admin and ("team 1" in lower_roles or "team 2" in lower_roles)
         if is_viewer and user_full_name:
             st.sidebar.markdown(f"**Role:** Viewer")
             st.sidebar.markdown(f"**BD Name:** {user_full_name}")
             sales_df = sales_df[sales_df["bd_name"] == user_full_name]
+            if is_team_leader:
+                # Determine exactly which team they belong to and filter
+                if "team 1" in lower_roles:
+                    sales_df = sales_df[sales_df["Team"] == "Team 1"]
+                elif "team 2" in lower_roles:
+                    sales_df = sales_df[sales_df["Team"] == "Team 2"]
             if sales_df.empty:
                 st.warning(f"No data available for BD Name '{user_full_name}'.")
         elif is_admin:
@@ -542,9 +586,11 @@ if st.session_state.get("authentication_status"):
         # 1. Filter the entire dataset by the selected date FIRST
         curr_base_df = sales_df[(sales_df["Date"] >= start_date) & (sales_df["Date"] <= end_date)]
 
-        filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
-
         # 2. Build cascading dropdowns from the date-filtered data
+        # Expanded to 5 columns to fit the Team filter
+
+        filter_col1, filter_col2, filter_col3, filter_col4, filter_col5 = st.columns(5)
+
         with filter_col1:
             bd_opts = sorted(curr_base_df["bd_name"].dropna().unique().tolist())
             
@@ -559,23 +605,42 @@ if st.session_state.get("authentication_status"):
             available_restaurants = sorted(rest_cascade["Restaurant name"].dropna().unique().tolist())
             restaurant = st.multiselect("Restaurant", available_restaurants)
 
-        # Cascade Restaurant to Status
-        status_cascade = rest_cascade[rest_cascade["Restaurant name"].isin(restaurant)] if restaurant else rest_cascade
+        # Cascade Restaurant to Team
+        team_cascade = rest_cascade[rest_cascade["Restaurant name"].isin(restaurant)] if restaurant else rest_cascade
         
         with filter_col3:
-            # Assuming the column is 'order_status' based on your session_state init
-            available_statuses = sorted(status_cascade["order_status"].dropna().unique().tolist())
+            available_teams = sorted(team_cascade["Team"].dropna().unique().tolist()) if "Team" in team_cascade.columns else []
+
+            if is_team_leader:
+                # Lock the dropdown to their specific team
+                if "team 1" in lower_roles:
+                    team = st.multiselect("Team", available_teams, default=["Team 1"], disabled=True)
+                elif "team 2" in lower_roles:
+                    team = st.multiselect("Team", available_teams, default=["Team 2"], disabled=True)
+                else:
+                    team = st.multiselect("Team", available_teams)
+            else:
+                # Admins and Viewers get an interactive dropdown
+                team = st.multiselect("Team", available_teams)
+
+        # Cascade Team to Status
+        status_cascade = team_cascade[team_cascade["Team"].isin(team)] if team else team_cascade
+        
+        with filter_col4:
+            available_statuses = sorted(status_cascade["order_status"].dropna().unique().tolist()) if "order_status" in status_cascade.columns else []
             order_status = st.multiselect("Status", available_statuses)
 
         # Cascade Status to Category
         cat_cascade = status_cascade[status_cascade["order_status"].isin(order_status)] if order_status else status_cascade
         
-        with filter_col4:
-            # Assuming the column is 'category' based on your session_state init
+        with filter_col5:
             import numpy as np
-            cat_cascade["category"] = cat_cascade["category"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
-            available_categories = sorted(cat_cascade["category"].unique().tolist())
-            category_name = st.multiselect("Category", available_categories)
+            if "category" in cat_cascade.columns:
+                cat_cascade["category"] = cat_cascade["category"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
+                available_categories = sorted(cat_cascade["category"].unique().tolist())
+                category_name = st.multiselect("Category", available_categories)
+            else:
+                category_name = []
 
         # ---------------------------------------------------------
         # FINAL APPLICATION OF ALL FILTERS
@@ -882,11 +947,18 @@ if st.session_state.get("authentication_status"):
         username, roles, first_name = get_user_info_from_config()
         is_admin = "admin" in [role.lower() for role in roles]
         is_viewer = not is_admin and "viewer" in [role.lower() for role in roles]
-
+        is_team_leader = not is_admin and ( ("Team 1" in [role.lower() for role in roles]) or ("Team 2" in [role.lower() for role in roles]))
+        lower_roles = [role.lower() for role in roles]
         if is_viewer and first_name:
             st.sidebar.markdown(f"**Role:** Viewer")
             st.sidebar.markdown(f"**BD Name:** {first_name}")
             cancel_df = cancel_df[cancel_df["BD"] == first_name]
+            if is_team_leader:
+                # Determine exactly which team they belong to and filter
+                if "team 1" in lower_roles:
+                    cancel_df = cancel_df[cancel_df["Team"] == "Team 1"]
+                elif "team 2" in lower_roles:
+                    cancel_df = cancel_df[cancel_df["Team"] == "Team 2"]
             if cancel_df.empty:
                 st.warning(f"No data available for BD Name '{first_name}'.")
         elif is_admin:
@@ -920,132 +992,118 @@ if st.session_state.get("authentication_status"):
             st.session_state.cancel_category = sorted(cancel_df["category"].dropna().unique().tolist())
         if "cancel_reason" not in st.session_state:
             st.session_state.cancel_reason = sorted(cancel_df["cancellation_reason"].dropna().unique().tolist())
-
-        # Create 5 columns instead of 4 to accommodate the new filter
-        col1, col2, col3= st.columns(3)
         
-        # 1. BD Name Filter (Moved to first so it dictates available restaurants)
+        # Safely parse Streamlit's date_input state
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+        elif len(date_range) == 1:
+            start_date = end_date = date_range[0]
+        else:
+            start_date, end_date = min_date, max_date
+
+        # Slice base dataframe by date first
+        curr_base_df = cancel_df[(cancel_df["Date"] >= start_date) & (cancel_df["Date"] <= end_date)].copy()
+
+        # Define all 5 columns at once
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        # 1. BD Name Filter
         with col1:
-            available_bd = sorted(cancel_df["BD"].dropna().unique().tolist())
-            filtered_bd = [x for x in st.session_state.cancel_bd_name if x in available_bd]
+            available_bd = sorted(curr_base_df["BD"].dropna().unique().tolist())
+            filtered_bd = [x for x in st.session_state.get("cancel_bd_name", []) if x in available_bd]
             
             if not filtered_bd and available_bd:
                 filtered_bd = available_bd if not is_viewer else [x for x in available_bd if x == first_name]
             
-            bd_name = st.multiselect(
-                "BD Name",
-                available_bd,
-                default=filtered_bd,
-                key="cancel_bd_select",
-                placeholder="Select BD..."
-            )
+            bd_name = st.multiselect("BD Name", available_bd, default=filtered_bd, disabled=is_viewer, key="cancel_bd_select")
             st.session_state.cancel_bd_name = bd_name
-            if bd_name:
-                st.caption(f"✓ {len(bd_name)} selected")
 
-        # 2. Restaurant Filter - filtered based on BD selection
-        with col2:
-            temp_df = cancel_df.copy()
-            if bd_name:
-                temp_df = temp_df[temp_df["BD"].isin(bd_name)]
-                
-            available_restaurants = sorted(temp_df["restaurant_name"].dropna().unique().tolist())
-            
-            # This logic automatically drops selected restaurants if they don't belong to the newly selected BD
-            filtered_rest = [x for x in st.session_state.cancel_restaurant if x in available_restaurants]
-            if not filtered_rest and available_restaurants:
-                filtered_rest = available_restaurants
-                
-            restaurant = st.multiselect(
-                "Restaurant",
-                available_restaurants,
-                default=filtered_rest,
-                key="cancel_restaurant_select",
-                placeholder="Select Rest..."
-            )
-            st.session_state.cancel_restaurant = restaurant
-            if restaurant:
-                st.caption(f"✓ {len(restaurant)} selected")
-        col4, col5 = st.columns(2)
-        # 3. Team Filter - filtered based on BD and Restaurant
-        with col3:
-            if restaurant:
-                temp_df = temp_df[temp_df["restaurant_name"].isin(restaurant)]
-                
-            available_teams = sorted(temp_df["team"].dropna().unique().tolist())
-            
-            filtered_team = [x for x in st.session_state.cancel_team if x in available_teams]
-            if not filtered_team and available_teams:
-                filtered_team = available_teams
-            
-            team = st.multiselect(
-                "Team",
-                available_teams,
-                default=filtered_team,
-                key="cancel_team_select",
-                placeholder="Select teams..."
-            )
-            st.session_state.cancel_team = team
-            if team:
-                st.caption(f"✓ {len(team)} selected")
+        # CASCADE 1
+        rest_cascade = curr_base_df[curr_base_df["BD"].isin(bd_name)] if bd_name else curr_base_df
         
-        # 4. Category Filter - filtered based on previous selections
+        # 2. Restaurant Filter
+        with col2:
+            available_restaurants = sorted(rest_cascade["restaurant_name"].dropna().unique().tolist())
+            filtered_rest = [x for x in st.session_state.get("cancel_restaurant", []) if x in available_restaurants]
+            
+            restaurant = st.multiselect("Restaurant", available_restaurants, default=filtered_rest, key="cancel_restaurant_select")
+            st.session_state.cancel_restaurant = restaurant
+
+        # CASCADE 2
+        team_cascade = rest_cascade[rest_cascade["restaurant_name"].isin(restaurant)] if restaurant else rest_cascade
+        is_team_leader = not is_admin and ("team 1" in lower_roles or "team 2" in lower_roles)
+        lower_roles = [role.lower() for role in roles]
+        # 3. Team Filter
+        with col3:
+            # Note: Using lowercase "team" because this is the Cancellations dataframe
+            available_teams = sorted(team_cascade["team"].dropna().unique().tolist()) if "team" in team_cascade.columns else []
+            
+            if is_team_leader:
+                # Lock the dropdown to their specific team
+                if "team 1" in lower_roles:
+                    team = st.multiselect("Team", available_teams, default=["Team 1"], disabled=True, key="cancel_team_select")
+                elif "team 2" in lower_roles:
+                    team = st.multiselect("Team", available_teams, default=["Team 2"], disabled=True, key="cancel_team_select")
+                else:
+                    team = st.multiselect("Team", available_teams, key="cancel_team_select")
+            else:
+                # Admins and Viewers get an interactive dropdown
+                team = st.multiselect("Team", available_teams, key="cancel_team_select")
+
+        # Cascade Team to Category (Matches your Sales logic style)
+        cat_cascade = team_cascade[team_cascade["team"].isin(team)] if team else team_cascade
+        
+        # 4. Category Filter
         with col4:
             import numpy as np
-            # Replace empty strings/spaces with NaN, then fill with "Blank"
-            temp_df["category"] = temp_df["category"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
-            
-            available_categories = sorted(temp_df["category"].unique().tolist())
-            
-            # CRITICAL FIX 1: Use a unique session state name for the Cancel tab!
-            if "cancel_category" not in st.session_state:
-                st.session_state.cancel_category = available_categories
+            if "category" in cat_cascade.columns:
+                cat_cascade["category"] = cat_cascade["category"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
+                available_categories = sorted(cat_cascade["category"].unique().tolist())
+                
+                filtered_cat = [x for x in st.session_state.get("cancel_category", []) if x in available_categories]
+                category_name = st.multiselect("Category", available_categories, default=filtered_cat, key="cancel_category_select")
+                st.session_state.cancel_category = category_name
+            else:
+                category_name = []
 
-            filtered_category = [x for x in st.session_state.cancel_category if x in available_categories]
-            if not filtered_category and available_categories:
-                filtered_category = available_categories
-            
-            category_name = st.multiselect(
-                "Category",
-                options=available_categories,
-                default=filtered_category,
-                key="cancel_category_select"  # Unique key for Cancel tab
-            )
-            st.session_state.cancel_category = category_name
-            if category_name:
-                st.caption(f"✓ {len(category_name)} selected")
+        # CASCADE 4 (Crucial fix: reason relies on this)
+        reason_cascade = cat_cascade[cat_cascade["category"].isin(category_name)] if category_name else cat_cascade
 
-        # 5. Cancellation Reason Filter - filtered based on all previous selections
+        # 5. Reason Filter
         with col5:
-            if category_name:
-                temp_df = temp_df[temp_df["category"].isin(category_name)]
+            if "cancellation_reason" in reason_cascade.columns:
+                available_reasons = sorted(reason_cascade["cancellation_reason"].dropna().unique().tolist())
+                filtered_reason = [x for x in st.session_state.get("cancel_reason", []) if x in available_reasons]
                 
-            available_reasons = sorted(temp_df["cancellation_reason"].dropna().unique().tolist())
-            
-            # Use unique session state for cancellation reason
-            if "cancel_reason" not in st.session_state:
-                st.session_state.cancel_reason = available_reasons
+                cancel_reason = st.multiselect("Reason", available_reasons, default=filtered_reason, key="cancel_reason_select")
+                st.session_state.cancel_reason = cancel_reason
+            else:
+                cancel_reason = []
 
-            filtered_reason = [x for x in st.session_state.cancel_reason if x in available_reasons]
-            if not filtered_reason and available_reasons:
-                filtered_reason = available_reasons
-                
-            cancel_reason = st.multiselect(
-                "Reason",
-                available_reasons,
-                default=filtered_reason,
-                key="cancel_reason_select",
-                placeholder="Select Reason..."
-            )
-            st.session_state.cancel_reason = cancel_reason
-            if cancel_reason:
-                st.caption(f"✓ {len(cancel_reason)} selected")
+        search_col1, search_col2 = st.columns(2)
+        with search_col1:
+            reason_search = st.text_input("Search by restaurant, product, BD, or cancellation reason", value="")
+
+        # Final filtering applied sequentially
+        filtered_cancel_df = curr_base_df.copy()
+        if bd_name:
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["BD"].isin(bd_name)]
+        if restaurant:
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["restaurant_name"].isin(restaurant)]
+        if team:
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["team"].isin(team)]
+        if category_name:
+            filtered_cancel_df["category"] = filtered_cancel_df["category"].replace(r'^\s*$', np.nan, regex=True).fillna("Blank")
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["category"].isin(category_name)]
+        if cancel_reason:
+            filtered_cancel_df = filtered_cancel_df[filtered_cancel_df["cancellation_reason"].isin(cancel_reason)]
 
         search_col1, search_col2 = st.columns(2)
         with search_col1:
             reason_search = st.text_input(
                 "Search by restaurant, product, BD, or cancellation reason",
                 value="",
+                key="cancel_reason_search" # Add this unique key parameter
             )
 
         # Apply ALL filters to the final dataframe

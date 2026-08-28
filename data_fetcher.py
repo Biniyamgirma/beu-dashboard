@@ -36,6 +36,21 @@ def fetch_data_all_sales(start_date: str | None = None,end_date: str | None = No
           order_details.quantity,
           orders.order_status,
           categories.name AS category,
+          CASE
+            WHEN admins.f_name IN (
+                'Yohannes',
+                'Abreham',
+                'Rekik',
+                'Yeabtsega'
+              ) THEN 'Team 1'
+            WHEN admins.f_name IN (
+                'Mifta',
+                'Abel',
+                'Chernet',
+                'Haregewyn'
+              ) THEN 'Team 2'
+            ELSE 'NO TEAM'
+          END AS Team,
           CONCAT(admins.f_name, ' ', admins.l_name) AS bd_name
         FROM
           orders
@@ -102,10 +117,20 @@ def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | 
           orders.order_status,
           CONCAT(admins.f_name, ' ', admins.l_name) AS BD,
           CASE
-            WHEN admins.f_name IN ('Yeabtsega', 'Yohannes','Rekik','Abreham') THEN 'Team 1'
-            WHEN admins.f_name IN ('Mifta','Chernet', 'Abel','Haregewyn') THEN 'Team 2'
-            ELSE 'NO TEAM'
-          END AS team,
+              WHEN admins.f_name IN (
+                  'Yohannes',
+                  'Abreham',
+                  'Rekik',
+                  'Yeabtsega'
+                ) THEN 'Team 1'
+              WHEN admins.f_name IN (
+                  'Mifta',
+                  'Abel',
+                  'Chernet',
+                  'Haregewyn'
+                ) THEN 'Team 2'
+              ELSE 'NO TEAM'
+            END AS Team,
           (TIMESTAMPDIFF(SECOND, orders.placed_at, orders.canceled) / 60) AS cancel_time,
           categories.name AS category
         FROM

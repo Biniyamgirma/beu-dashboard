@@ -34,6 +34,7 @@ credentials:
       logged_in: False # Will be managed automatically
       password: admin111 # Will be hashed automatically
       roles: # Optional
+      - admin
       - Team 2
       - editor
     data@et.beudelivery.com:
@@ -55,6 +56,7 @@ credentials:
           logged_in: False # Will be managed automatically
           password: Mes1919Mes@ # Will be hashed automatically
           roles: # Optional
+          - admin
           - Team 1
           - editor
     kaluaabe@gmail.com:

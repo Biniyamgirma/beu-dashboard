@@ -146,10 +146,10 @@ def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | 
           AND orders.order_status = 'canceled'
           AND orders.restaurant_id NOT IN (999, 1329)
           -- REMOVED the strict cancellation reason filter to fetch ALL canceled orders
-          -- AND (
-          --   can_reason.message LIKE '(Restaurant)%'
-          --   OR orders.cancelation_reason IN ('C5', 'C2', 'C7', 'C8', 'R15')
-          -- )
+          AND (
+           can_reason.message LIKE '(Restaurant)%'
+            OR orders.cancelation_reason IN ('C5', 'C2', 'C7', 'C8', 'R15')
+         )
         GROUP BY
           or_detail.id
         ORDER BY

@@ -90,3 +90,39 @@ credentials:
           password: "1234"
           roles: # Optional
           - viewer
+    mebafikadu706@gmail.com:
+          email: mebafikadu706@gmail.com
+          failed_login_attempts: 0 # Will be managed automatically
+          first_name: Harwgeweyn 
+          last_name: " "
+          logged_in: False 
+          password: "g5vrUxRxN130QsJF"
+          roles: # Optional
+          - viewer
+    abelwasihun4@gmail.com:
+          email: abelwasihun4@gmail.com
+          failed_login_attempts: 0 # Will be managed automatically
+          first_name: Abel 
+          last_name: "Wassihun"
+          logged_in: False 
+          password: "YqUqqG04pZ77HpPA"
+          roles: # Optional
+          - viewer
+    Rekikmistir1@gmail.com:
+          email: Rekikmistir1@gmail.com
+          failed_login_attempts: 0 # Will be managed automatically
+          first_name: Rekik 
+          last_name: " "
+          logged_in: False 
+          password: "MrzcCEfrBgnNbMQG"
+          roles: # Optional
+          - viewer
+    Yeabtsegaayele81@gmail.com:
+          email: Yeabtsegaayele81@gmail.com
+          failed_login_attempts: 0 # Will be managed automatically
+          first_name: Yeabtsega 
+          last_name: " "
+          logged_in: False 
+          password: "c2aaZGicyrhQxX8U"
+          roles: # Optional
+          - viewer

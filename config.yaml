@@ -90,20 +90,11 @@ credentials:
           password: "1234"
           roles: # Optional
           - viewer
-    mebafikadu706@gmail.com:
-          email: mebafikadu706@gmail.com
-          failed_login_attempts: 0 # Will be managed automatically
-          first_name: Harwgeweyn 
-          last_name: " "
-          logged_in: False 
-          password: "g5vrUxRxN130QsJF"
-          roles: # Optional
-          - viewer
     abelwasihun4@gmail.com:
           email: abelwasihun4@gmail.com
           failed_login_attempts: 0 # Will be managed automatically
-          first_name: Abel 
-          last_name: "Wassihun"
+          first_name: "Abel"  
+          last_name: "Wasihun"
           logged_in: False 
           password: "YqUqqG04pZ77HpPA"
           roles: # Optional
@@ -111,8 +102,8 @@ credentials:
     Rekikmistir1@gmail.com:
           email: Rekikmistir1@gmail.com
           failed_login_attempts: 0 # Will be managed automatically
-          first_name: Rekik 
-          last_name: " "
+          first_name: "Rekik"  
+          last_name: "Mistir"
           logged_in: False 
           password: "MrzcCEfrBgnNbMQG"
           roles: # Optional
@@ -120,9 +111,45 @@ credentials:
     Yeabtsegaayele81@gmail.com:
           email: Yeabtsegaayele81@gmail.com
           failed_login_attempts: 0 # Will be managed automatically
-          first_name: Yeabtsega 
-          last_name: " "
+          first_name: "Yeabtsega" 
+          last_name: "Ayele"
           logged_in: False 
           password: "c2aaZGicyrhQxX8U"
+          roles: # Optional
+          - viewer
+    yohannesgirmay6@gmail.com:
+          email: yohannesgirmay6@gmail.com
+          failed_login_attempts: 0 # Will be managed automatically
+          first_name: "Yohannes"  
+          last_name: "Girmay"
+          logged_in: False 
+          password: "ygELquVO8MnM0khT"
+          roles: # Optional
+          - viewer
+    abrehamsileshi6@gmail.com:
+          email: abrehamsileshi6@gmail.com
+          failed_login_attempts: 0 # Will be managed automatically
+          first_name: "Abreham"  
+          last_name: "Sileshi"
+          logged_in: False 
+          password: "HJ9hfgTzHNtrJ0xs"
+          roles: # Optional
+          - viewer
+    cherenetsolomon70@gmail.com:
+          email: cherenetsolomon70@gmail.com
+          failed_login_attempts: 0 # Will be managed automatically
+          first_name: "Chernet" 
+          last_name: "Solomon"
+          logged_in: False 
+          password: "gG8Tud0n6f0oyXID"
+          roles: # Optional
+          - viewer
+    mebafikadu706@gmail.com:
+          email: mebafikadu706@gmail.com
+          failed_login_attempts: 0 # Will be managed automatically
+          first_name: "Haregewyn" 
+          last_name: "Fikadu"
+          logged_in: False 
+          password: "ZV71A6y1uJQukVkI"
           roles: # Optional
           - viewer

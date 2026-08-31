@@ -153,3 +153,12 @@ credentials:
           password: "ZV71A6y1uJQukVkI"
           roles: # Optional
           - viewer
+    Kedirmifta3@gmail.com:
+          email: Kedirmifta3@gmail.com
+          failed_login_attempts: 0 # Will be managed automatically
+          first_name: "Mifta" 
+          last_name: "Kedir"
+          logged_in: False 
+          password: "FXdc70pYVG0ayVTc"
+          roles: # Optional
+          - viewer

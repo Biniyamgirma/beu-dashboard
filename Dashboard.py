@@ -15,10 +15,16 @@ import altair as alt  # <--- Add this line here
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 from data_fetcher import (
+    fetch_All_Canclation,
     fetch_data_all_delivered,
     fetch_data_all_sales,
     fetch_data_all_cancellations,
     fetch_marketing_budgets,
+    fetch_All_delivered,
+    fetch_restaurant_order_count_in_each_district,
+    fetch_restaurant_payment,
+    fetch_root_file,
+    fetch_All_Canclation,
     CSV_PATH,
     SALES_CSV_PATH,
     CANCELLATIONS_CSV_PATH,
@@ -197,7 +203,7 @@ except Exception as e:
 if st.session_state.get("authentication_status"):
     authenticator.logout("Logout", "sidebar")
     st.sidebar.write(f'Welcome *{st.session_state["name"]}*')
-    categories = ["ALL Delivered", "All Sales", "All Cancellations"]
+    categories = ["ALL Delivered", "All Sales", "All Cancellations","Common data"]
 
     # 4. Conditionally add 'Marketing Budget' if the user has 'marketing' or 'admin' role
     if "marketing" in roles or "admin" in roles:
@@ -409,6 +415,7 @@ if st.session_state.get("authentication_status"):
             ("beU Discount On Food", "beu_discount_on_food", "sum"),
             ("Restaurant Discount On Food", "restaurant_discount_on_food", "sum"),
             ("Coupon Discount Amount", "coupon_discount_amount", "sum"),
+            ("Restaurant With Atleast One Order", "Restaurant name", "nunique"),
         ]
 
         cols = st.columns(3)
@@ -501,6 +508,119 @@ if st.session_state.get("authentication_status"):
             st.plotly_chart(fig, width="stretch")
         else:
             st.info("No team Order count data available for the current filters.")
+    
+    elif category =="Common data":
+        st.header("Common Data")
+
+
+        # 2. Scalable Dropdown (Easily add more queries to this dictionary later)
+        data_options = [
+            "All Canceled Orders",
+            "All Delivered Orders",
+            "Root File (Restaurants)",
+            "Restaurant Sales Report",
+            "Restaurant Daily order count report",
+        ]
+
+        
+        selected_data = st.selectbox("Select Data to View:", data_options)
+
+        
+        is_admin = "admin" in [role.lower() for role in roles]
+        lower_roles = [role.lower() for role in roles]
+        # 3. Dynamic Query Execution
+        one_month_interval = dt.date.today() - dt.timedelta(days=30)
+        if selected_data == "All Canceled Orders":
+            st.subheader("All Canceled Orders")
+            
+            one_month_interval = dt.date.today() - dt.timedelta(days=30)
+            date_range = st.date_input(
+                                "Select Date Range",
+                                value=(one_month_interval, dt.date.today()),
+                                key="common_data_date_picker"  # <-- Add this unique key
+                            )
+            
+            
+            if len(date_range) == 2:
+                start_date,end_date = date_range
+                df = fetch_All_Canclation(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+                st.dataframe(df)
+            
+            
+        elif selected_data == "All Delivered Orders" and is_admin:
+            st.subheader("All Delivered Orders")
+            date_range = st.date_input(
+                    "Select Date Range",
+                    value=(one_month_interval, dt.date.today()),
+                    key="common_data_date_picker"  # <-- Add this unique key
+                )
+
+
+            if len(date_range) == 2:
+                start_date,end_date = date_range
+                df = fetch_All_delivered(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+                st.dataframe(df)
+            
+            
+        elif selected_data == "Root File (Restaurants)" and is_admin:
+            st.subheader("Root File (Restaurants)")
+            df = fetch_root_file()
+            st.dataframe(df)
+        elif selected_data == "Restaurant Sales Report" and is_admin:
+            st.subheader("Restaurant Sales Report")
+            date_range = st.date_input(
+                    "Select Date Range",
+                    value=(one_month_interval, dt.date.today()),
+                    key="common_data_date_picker"  # <-- Add this unique key
+                )
+
+            start_date, end_date = date_range if len(date_range) == 2 else (one_month_interval, dt.date.today())
+
+            df = fetch_restaurant_payment(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+            # 1. Get unique restaurant names and add "Select All" as the first option
+            restaurant_list = ["Select All"] + df['restaurant_name'].unique().tolist()
+            # 2. Create the dropdown menu
+            selected_restaurant = st.selectbox("Filter by Restaurant:", restaurant_list)
+
+            # 3. Filter the dataframe based on the user's choice
+            if selected_restaurant == "Select All":
+                filtered_df = df
+            else:
+                filtered_df = df[df['restaurant_name'] == selected_restaurant]
+
+            # 4. Display the filtered dataframe
+            st.dataframe(filtered_df)
+        elif selected_data == "Restaurant Daily order count report" and not is_admin:
+            st.subheader("Restaurant Daily order count report")
+            # date_range = st.date_input(
+            #         "Select Date Range",
+            #         value=(one_month_interval, dt.date.today()),
+            #         key="common_data_date_picker"  # <-- Add this unique key
+            #     )
+
+            # start_date, end_date = date_range if len(date_range) == 2 else (one_month_interval, dt.date.today())
+
+            # df = fetch_restaurant_order_count_in_each_district(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+            # st.dataframe(df)
+            # Note: Added the date filter to food.deleted_at or similar if needed. 
+    #         # If this query doesn't need date filtering, leave the WHERE clause as you provided it.
+    
+
+    #     # Fetching and Displaying Data
+    #     if st.button("Fetch Data"):
+    #         with st.spinner(f"Fetching {selected_data}..."):
+    #             try:
+    #                 # df = pd.read_sql(query, conn) # Replace with your actual DB fetching function
+    #                 # st.dataframe(df, use_container_width=True)
+    #                 st.success("Query loaded successfully!")
+    #                 st.code(query, language='sql') # Temporary visual output of the executed query
+    #             except Exception as e:
+    #                 st.error(f"Error fetching data: {e}")
+    # elif len(date_range) < 2:
+    #     st.info("Please select both a start and end date.")
+
+
+
 
     elif category == "All Sales":
         st.subheader("All Sales")

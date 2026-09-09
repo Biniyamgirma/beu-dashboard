@@ -422,3 +422,220 @@ def _safe_write_csv(df: pd.DataFrame, path: str) -> str:
       logging.error(f"Unexpected error writing CSV to {path}: {e}")
       raise
 
+def fetch_All_delivered(start_date: str | None = None, end_date: str | None = None):
+    query = f"""
+                    SELECT
+                        orders.id, res.name as 'restaurant name', orders.created_at, orders.order_amount,
+                        orders.coupon_discount_amount, orders.restaurant_discount_amount, orders.delivery_charge,
+                        rfd.total_price, rfd.quantity, rfd.restaurant_discount, rfd.restaurant_discount_on_food,
+                        rfd.beu_discount, rfd.beu_discount_on_food, rfd.price_after_restaurant_discount,
+                        rfd.restaurant_fee, rfd.commission_value, ca.name as `resturant category`,
+                        orders.order_status, orders.cancelation_reason, orders.service_charge,
+                        orders.log_details->>'$.service_charges.restaurant_service_charge_amount' as resturant_service_charge,
+                        res.comission, users.id AS user_id, users.app_language, users.phone, u_dz.name as user_district,
+                        orders.created_by, orders.language_pref_fee,
+                        orders.delivery_address ->> '$.dz_name' AS customer_district,
+                        orders.delivery_address ->> '$.address' AS customer_addresses,
+                        dz.name AS restaurant_district, CONCAT(admins.f_name, ' ', admins.l_name) AS `BD NAME`,
+                        CASE
+                            WHEN admins.f_name IN ('Yohannes', 'Abreham', 'Rekik', 'Yeabtsega') THEN 'Team 1'
+                            WHEN admins.f_name IN ('Mifta', 'Abel', 'Cherenet', 'Haregewyn') THEN 'Team 2'
+                            ELSE 'NO TEAM'
+                        END AS Team
+                    FROM orders
+                    JOIN users ON users.id = orders.user_id
+                    JOIN restaurants res ON res.id = orders.restaurant_id
+                    LEFT JOIN categories ca ON ca.id = res.category_id
+                    JOIN restaurant_fee_details rfd ON rfd.order_id = orders.id
+                    JOIN delivery_zones dz ON dz.id = res.z_id
+                    JOIN delivery_zones u_dz ON u_dz.id=users.z_id
+                    JOIN admins ON admins.id = res.business_developer_id
+                    WHERE DATE(orders.created_at) BETWEEN '{start_date}' AND '{end_date}'
+                    AND orders.order_status = 'delivered';
+                    """
+    with create_db_engine().connect() as connection:
+        chunks = pd.read_sql(query, connection, chunksize=50000)
+        result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+        return result
+
+def fetch_All_Canclation(start_date: str | None = None, end_date: str | None = None):
+    query = f"""
+                SELECT
+                    orders.id, res.name as `Rest_Name`, orders.created_at, orders.order_amount,
+                    orders.coupon_discount_amount, orders.restaurant_discount_amount, orders.delivery_charge,
+                    rfd.total_price, rfd.quantity, rfd.restaurant_discount, rfd.restaurant_discount_on_food,
+                    rfd.beu_discount, rfd.beu_discount_on_food, rfd.price_after_restaurant_discount, rfd.restaurant_fee,
+                    orders.log_details->>'$.service_charges.restaurant_service_charge_amount' as resturant_service_charge,
+                    rfd.commission_value, orders.order_status, orders.cancelation_reason, ca.message as `cancelation_reasons`,
+                    orders.service_charge, res.comission, users.id AS user_id, users.app_language, users.phone,
+                    u_dz.name as user_district, orders.created_by, orders.language_pref_fee,
+                    orders.delivery_address ->> '$.dz_name' AS customer_district,
+                    orders.delivery_address ->> '$.address' AS customer_addresses,
+                    dz.name AS restaurant_district, CONCAT(admins.f_name, ' ', admins.l_name) AS `BD NAME`,
+                    CASE
+                        WHEN admins.f_name IN ('Yohannes', 'Abreham', 'Rekik', 'Yeabtsega') THEN 'Team 1'
+                        WHEN admins.f_name IN ('Mifta', 'Abel', 'Cherenet', 'Haregewyn') THEN 'Team 2'
+                        ELSE 'NO TEAM'
+                    END AS Team
+                FROM orders
+                JOIN users ON users.id = orders.user_id
+                JOIN restaurants res ON res.id = orders.restaurant_id
+                LEFT JOIN cancellation_reasons ca ON ca.id=orders.cancelation_reason
+                LEFT JOIN restaurant_fee_details rfd ON rfd.order_id = orders.id
+                JOIN delivery_zones dz ON dz.id = res.z_id
+                JOIN admins ON admins.id = res.business_developer_id
+                JOIN delivery_zones u_dz ON u_dz.id=users.z_id
+                WHERE DATE(orders.created_at) BETWEEN '{start_date}' AND '{end_date}'
+                AND orders.order_status = 'canceled';
+                """
+    with create_db_engine().connect() as connection:
+        chunks = pd.read_sql(query, connection, chunksize=50000)
+        result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+        return result
+def fetch_root_file():
+        query = f"""
+                SELECT
+                    r.id, r.name as res_name, r.status, r.is_deleted, r.comission, r.service_charge,
+                    r.upFrontPayment, r.phone, r.optional_phone_numbers, r.opening_time, r.closeing_time,
+                    r.break_start_time, r.break_end_time, r.off_day, r.free_delivery, r.address,
+                    categories.name as categorie_name, CONCAT(admins.f_name, ' ', admins.l_name) AS `BD NAME`,
+                    CASE
+                        WHEN admins.f_name IN ('Yohannes', 'Abreham', 'Rekik', 'Yeabtsega') THEN 'Team 1'
+                        WHEN admins.f_name IN ('Mifta', 'Abel', 'Cherenet', 'Haregewyn') THEN 'Team 2'
+                        ELSE 'NO TEAM'
+                    END AS Team,
+                    dz.name as District,
+                    count(distinct if(food.status = 1, food.id, null)) active,
+                    count(distinct if(food.status = 0, food.id, null)) inactive
+                FROM restaurants r
+                LEFT JOIN admins ON admins.id = r.business_developer_id
+                LEFT JOIN food ON food.restaurant_id = r.id
+                LEFT JOIN delivery_zones dz ON dz.id = r.z_id
+                LEFT JOIN categories ON categories.id = r.category_id
+                WHERE r.is_deleted != 1
+                AND r.name not like 'Ethio-post%'
+                AND food.deleted_at IS NULL
+                GROUP BY r.id;
+                """
+        with create_db_engine().connect() as connection:
+            chunks = pd.read_sql(query, connection, chunksize=50000)
+            result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+        return result
+def fetch_restaurant_payment(start_date: str | None = None, end_date: str | None = None):
+    query = """
+               select od.id                                                                                     as order_details_id,
+       o.id                                                                                      as order_id,
+       f.name                                                                                    as item_name,
+       r.name                                                                                    as restaurant_name,
+       od.price,
+       od.total_add_on_price,
+       od.quantity,
+       ((od.price * od.quantity)+od.total_add_on_price) as total_amount,
+       od.restaurant_discount,
+       (
+    ((od.price * od.quantity) + od.total_add_on_price)
+    - (((od.price * od.quantity) * od.rest_rest_discount) / 100)
+    - CASE
+        WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
+        ELSE (((od.price * od.quantity) * od.food_rest_discount) / 100)
+      END
+) AS price_after_res_discount, #### i need to consider this
+   (  (((od.price * od.quantity) * od.rest_rest_discount) / 100)
+    + CASE
+        WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
+        ELSE (((od.price * od.quantity) * od.food_rest_discount) / 100)
+      END) as my_restaurant_discount,
+
+   (
+  (
+    (
+  (
+    ((od.price * od.quantity) + od.total_add_on_price)
+    - (((od.price * od.quantity) * od.rest_rest_discount) / 100)
+    - CASE
+        WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
+        ELSE (((od.price * od.quantity) * od.food_rest_discount) / 100)
+      END
+)
+  ) * rfd.commission_percentage
+) / 100) AS commission_amount,
+       (
+  (
+    ((od.price * od.quantity) + od.total_add_on_price)
+    - (((od.price * od.quantity) * od.rest_rest_discount) / 100)
+    - CASE
+        WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
+        ELSE (((od.price * od.quantity) * od.food_rest_discount) / 100)
+      END
+) - (
+  (
+    (
+      (
+        ((od.price * od.quantity) + od.total_add_on_price) - (
+          ((od.price * od.quantity) * od.rest_rest_discount) / 100
+        ) - CASE
+          WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
+          ELSE (
+            ((od.price * od.quantity) * od.food_rest_discount) / 100
+          )
+        END
+      )
+    ) * rfd.commission_percentage
+  ) / 100
+)
+) AS restaurant_fee
+from orders o
+         join beu.order_details od on o.id = od.order_id
+         join food f on od.food_id = f.id
+         join beu.restaurants r on o.restaurant_id = r.id
+         join restaurant_fee_details rfd on o.id = rfd.order_id
+where r.id not in (999, 1329)
+  and r.name not like 'Ethio-post%'
+  and r.name not like '%Donate%'
+  and date(o.created_at) between %s and %s
+
+ 
+  and (
+    o.order_status = 'delivered'
+        or (
+        o.order_status = 'canceled' and (
+            o.cancelation_reason in ('R41', 'R42', 'R28')
+                or o.cancelation_reason like 'I%')
+        )
+    )
+                """
+    with create_db_engine().connect() as connection:
+        chunks = pd.read_sql(query, connection,params=(start_date, end_date), chunksize=50000)
+        result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+        return result
+def fetch_restaurant_order_count_in_each_district(start_date: str | None = None, end_date: str | None = None):
+    query = """
+             select
+    date(o.created_at) as order_date,
+    r.name as restaurant_name,
+        dz.name as district,
+        concat(a.f_name,' ',a.l_name) as `Bd name`,
+        count(distinct o.id) as order_count
+
+
+    from orders o
+join beu.restaurants r on o.restaurant_id = r.id
+join delivery_zones dz on dz.id=r.z_id
+join beu.admins a on o.dispatcher_id = a.id
+        where
+date(o.created_at) between %s and %s
+  and r.id not in (999, 1329)
+and (
+    o.order_status = 'delivered'
+    or (
+      o.order_status = 'canceled' and (
+      o.cancelation_reason in ('R41', 'R42', 'R28')
+      or o.cancelation_reason like 'I%' )
+    )
+  )
+group by o.restaurant_id,date(o.created_at);
+                """
+    with create_db_engine().connect() as connection:
+        chunks = pd.read_sql(query, connection,params=(start_date, end_date), chunksize=50000)
+        result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+        return result

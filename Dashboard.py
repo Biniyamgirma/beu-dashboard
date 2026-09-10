@@ -529,11 +529,11 @@ if st.session_state.get("authentication_status"):
         is_admin = "admin" in [role.lower() for role in roles]
         lower_roles = [role.lower() for role in roles]
         # 3. Dynamic Query Execution
-        one_month_interval = dt.date.today() - dt.timedelta(days=30)
+        one_month_interval = dt.date.today() - dt.timedelta(days=7)
         if selected_data == "All Canceled Orders":
             st.subheader("All Canceled Orders")
             
-            one_month_interval = dt.date.today() - dt.timedelta(days=30)
+            one_month_interval = dt.date.today() - dt.timedelta(days=7)
             date_range = st.date_input(
                                 "Select Date Range",
                                 value=(one_month_interval, dt.date.today()),
@@ -590,20 +590,27 @@ if st.session_state.get("authentication_status"):
 
             # 4. Display the filtered dataframe
             st.dataframe(filtered_df)
-        elif selected_data == "Restaurant Daily order count report" and not is_admin:
+        elif selected_data == "Restaurant Daily order count report" and is_admin:
             st.subheader("Restaurant Daily order count report")
-            # date_range = st.date_input(
-            #         "Select Date Range",
-            #         value=(one_month_interval, dt.date.today()),
-            #         key="common_data_date_picker"  # <-- Add this unique key
-            #     )
+            date_range = st.date_input(
+                    "Select Date Range",
+                    value=(one_month_interval, dt.date.today()),
+                    key="common_data_date_picker"  # <-- Add this unique key
+                )
 
-            # start_date, end_date = date_range if len(date_range) == 2 else (one_month_interval, dt.date.today())
+            start_date, end_date = date_range if len(date_range) == 2 else (one_month_interval, dt.date.today())
 
-            # df = fetch_restaurant_order_count_in_each_district(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-            # st.dataframe(df)
+            df = fetch_restaurant_order_count_in_each_district(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+
+            st.dataframe(df)
+            st.download_button(
+                label="Download CSV",
+                data=df.to_csv(index=False).encode('utf-8'),
+                file_name=f"restaurant_daily_order_count_{start_date}_{end_date}.csv",
+                mime="text/csv",
+            )
             # Note: Added the date filter to food.deleted_at or similar if needed. 
-    #         # If this query doesn't need date filtering, leave the WHERE clause as you provided it.
+            # If this query doesn't need date filtering, leave the WHERE clause as you provided it.
     
 
     #     # Fetching and Displaying Data

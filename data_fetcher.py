@@ -531,7 +531,6 @@ def fetch_restaurant_payment(start_date: str | None = None, end_date: str | None
        od.total_add_on_price,
        od.quantity,
        ((od.price * od.quantity)+od.total_add_on_price) as total_amount,
-       od.restaurant_discount,
        (
     ((od.price * od.quantity) + od.total_add_on_price)
     - (((od.price * od.quantity) * od.rest_rest_discount) / 100)
@@ -539,12 +538,12 @@ def fetch_restaurant_payment(start_date: str | None = None, end_date: str | None
         WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
         ELSE (((od.price * od.quantity) * od.food_rest_discount) / 100)
       END
-) AS price_after_res_discount, #### i need to consider this
+) AS price_after_res_discount,
    (  (((od.price * od.quantity) * od.rest_rest_discount) / 100)
     + CASE
         WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
         ELSE (((od.price * od.quantity) * od.food_rest_discount) / 100)
-      END) as my_restaurant_discount,
+      END) as restaurant_discount,
 
    (
   (
@@ -621,7 +620,7 @@ def fetch_restaurant_order_count_in_each_district(start_date: str | None = None,
     from orders o
 join beu.restaurants r on o.restaurant_id = r.id
 join delivery_zones dz on dz.id=r.z_id
-join beu.admins a on o.dispatcher_id = a.id
+join beu.admins a on r.business_developer_id = a.id
         where
 date(o.created_at) between %s and %s
   and r.id not in (999, 1329)

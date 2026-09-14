@@ -423,7 +423,7 @@ def _safe_write_csv(df: pd.DataFrame, path: str) -> str:
       raise
 
 def fetch_All_delivered(start_date: str | None = None, end_date: str | None = None):
-    query = f"""
+    query = """
                     SELECT
                         orders.id, res.name as 'restaurant name', orders.created_at, orders.order_amount,
                         orders.coupon_discount_amount, orders.restaurant_discount_amount, orders.delivery_charge,
@@ -450,16 +450,16 @@ def fetch_All_delivered(start_date: str | None = None, end_date: str | None = No
                     JOIN delivery_zones dz ON dz.id = res.z_id
                     JOIN delivery_zones u_dz ON u_dz.id=users.z_id
                     JOIN admins ON admins.id = res.business_developer_id
-                    WHERE DATE(orders.created_at) BETWEEN '{start_date}' AND '{end_date}'
+                    WHERE DATE(orders.created_at) BETWEEN %s AND %s
                     AND orders.order_status = 'delivered';
                     """
     with create_db_engine().connect() as connection:
-        chunks = pd.read_sql(query, connection, chunksize=50000)
+        chunks = pd.read_sql(query, connection, params=(start_date, end_date), chunksize=50000)
         result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
         return result
 
 def fetch_All_Canclation(start_date: str | None = None, end_date: str | None = None):
-    query = f"""
+    query = """
                 SELECT
                     orders.id, res.name as `Rest_Name`, orders.created_at, orders.order_amount,
                     orders.coupon_discount_amount, orders.restaurant_discount_amount, orders.delivery_charge,
@@ -485,15 +485,15 @@ def fetch_All_Canclation(start_date: str | None = None, end_date: str | None = N
                 JOIN delivery_zones dz ON dz.id = res.z_id
                 JOIN admins ON admins.id = res.business_developer_id
                 JOIN delivery_zones u_dz ON u_dz.id=users.z_id
-                WHERE DATE(orders.created_at) BETWEEN '{start_date}' AND '{end_date}'
+                WHERE DATE(orders.created_at) BETWEEN %s AND %s
                 AND orders.order_status = 'canceled';
                 """
     with create_db_engine().connect() as connection:
-        chunks = pd.read_sql(query, connection, chunksize=50000)
+        chunks = pd.read_sql(query, connection, params=(start_date, end_date), chunksize=50000)
         result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
         return result
 def fetch_root_file():
-        query = f"""
+        query = """
                 SELECT
                     r.id, r.name as res_name, r.status, r.is_deleted, r.comission, r.service_charge,
                     r.upFrontPayment, r.phone, r.optional_phone_numbers, r.opening_time, r.closeing_time,
@@ -599,7 +599,7 @@ where r.id not in (999, 1329)
         or (
         o.order_status = 'canceled' and (
             o.cancelation_reason in ('R41', 'R42', 'R28')
-                or o.cancelation_reason like 'I%')
+                or o.cancelation_reason like 'I%%')
         )
     )
                 """
@@ -629,7 +629,7 @@ and (
     or (
       o.order_status = 'canceled' and (
       o.cancelation_reason in ('R41', 'R42', 'R28')
-      or o.cancelation_reason like 'I%' )
+      or o.cancelation_reason like 'I%%')
     )
   )
 group by o.restaurant_id,date(o.created_at);

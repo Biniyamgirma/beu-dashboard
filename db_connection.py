@@ -59,6 +59,7 @@ def create_db_engine():
             "charset": "utf8mb4",
             "use_unicode": True,
         },
+        pool_pre_ping=True,
     )
 
     return engine

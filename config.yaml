@@ -10,7 +10,7 @@ credentials:
       first_name: Biniyam
       last_name: Girma
       logged_in: True # Will be managed automatically
-      password: '091625' # Will be hashed automatically
+      password: '$2b$12$XLry206LNG8.wi.WQsZBpeK6fAqkRBAukhbE6Y/oHb/Omadaf9ywq' # Will be hashed automatically
       roles: # Optional
       - admin
       - editor
@@ -21,7 +21,7 @@ credentials:
       first_name: Moses
       last_name: Teshome
       logged_in: False # Will be managed automatically
-      password: admin123 # Will be hashed automatically
+      password: '$2b$12$MbX1oQdZ7JQnTb4LDsiKu.jKP../1IpSCyoy7ZztqF71wBpl.Gsgy' # Will be hashed automatically
       roles: # Optional
       - admin
       - editor
@@ -32,7 +32,7 @@ credentials:
       first_name: Mintesnot
       last_name: Abeyie
       logged_in: False # Will be managed automatically
-      password: admin111 # Will be hashed automatically
+      password: '$2b$12$n4n9k84Ra8qUQsbhhiUZb.hzCAscdBOAFQeVHjLRCxIE.CVAZNfm.' # Will be hashed automatically
       roles: # Optional
       - admin
       - Team 2
@@ -43,7 +43,7 @@ credentials:
           first_name: Data
           last_name: Team
           logged_in: False # Will be managed automatically
-          password: admin112 # Will be hashed automatically
+          password: '$2b$12$vj.3xTIjuG0WK7DgWNE5nOW6/f/pYPKH2OZ91PnWhhzNs6Leq0x4C' # Will be hashed automatically
           roles: # Optional
           - admin
           - editor
@@ -54,7 +54,7 @@ credentials:
           first_name: Messi
           last_name: Haile
           logged_in: False # Will be managed automatically
-          password: Mes1919Mes@ # Will be hashed automatically
+          password: '$2b$12$V8Hnl4a2lr5qTk5MhhD1dOPSvScTNsJbxKbPxN2FkVg/EsmtL/DC.' # Will be hashed automatically
           roles: # Optional
           - admin
           - Team 1
@@ -65,7 +65,7 @@ credentials:
           first_name: Kalewengel
           last_name: Abebe
           logged_in: True 
-          password: '121314' 
+          password: '$2b$12$V5MpF9l5Ht5x/bxZyKS7tOd3vB48u92wEbKfehx0aQg6xcc4hZBSq' 
           roles: # Optional
           - admin
           - editor
@@ -76,7 +76,7 @@ credentials:
           first_name: BD 
           last_name: Manager
           logged_in: True 
-          password: Besisay@12345678 
+          password: '$2b$12$F08WeZIn4rhWa2vXmMJKGec1UfPRxg2l6CK3azY6Ok6putB0gWbCq' 
           roles: # Optional
           - admin
           - editor
@@ -87,7 +87,7 @@ credentials:
           first_name: Abreham 
           last_name: Sileshi
           logged_in: False 
-          password: "1234"
+          password: "$2b$12$9QDQ6oOyE2nMKodTpVTY7e8pNycfFqCKHWEEt1PkmdMiCcoWfEv2O"
           roles: # Optional
           - viewer
     abelwasihun4@gmail.com:
@@ -96,7 +96,7 @@ credentials:
           first_name: "Abel"  
           last_name: "Wasihun"
           logged_in: False 
-          password: "YqUqqG04pZ77HpPA"
+          password: "$2b$12$op3PZ.khDswlMenIPTOtv.EyV91TOWhvmbMTZY1XKhZ6cZT2QSMqe"
           roles: # Optional
           - viewer
     Rekikmistir1@gmail.com:
@@ -105,7 +105,7 @@ credentials:
           first_name: "Rekik"  
           last_name: "Mistir"
           logged_in: False 
-          password: "MrzcCEfrBgnNbMQG"
+          password: "$2b$12$SeNjoIfReq//nJ5EapV3CeNbsJuCiC2Qwjp1n8a8Z3WNCaqjynE9."
           roles: # Optional
           - viewer
     Yeabtsegaayele81@gmail.com:
@@ -114,7 +114,7 @@ credentials:
           first_name: "Yeabtsega" 
           last_name: "Ayele"
           logged_in: False 
-          password: "c2aaZGicyrhQxX8U"
+          password: "$2b$12$j3HzSoTAiGvb1bZnHD.AnOMqFo1hD0I20CM55dDAaj4UjI1JJLtsC"
           roles: # Optional
           - viewer
     yohannesgirmay6@gmail.com:
@@ -123,7 +123,7 @@ credentials:
           first_name: "Yohannes"  
           last_name: "Girmay"
           logged_in: False 
-          password: "ygELquVO8MnM0khT"
+          password: "$2b$12$/HUWxje70LozCVzdLWZT0.5AzC8gjN9bejL/IX4kSXKX72fQk8KRq"
           roles: # Optional
           - viewer
     abrehamsileshi6@gmail.com:
@@ -132,7 +132,7 @@ credentials:
           first_name: "Abreham"  
           last_name: "Sileshi"
           logged_in: False 
-          password: "HJ9hfgTzHNtrJ0xs"
+          password: "$2b$12$YdxS/bNh977lGyHvJML5aeCBUZI7XuA24LdPedTyXXnbvw0178w/6"
           roles: # Optional
           - viewer
     cherenetsolomon70@gmail.com:
@@ -141,7 +141,7 @@ credentials:
           first_name: "Chernet" 
           last_name: "Solomon"
           logged_in: False 
-          password: "gG8Tud0n6f0oyXID"
+          password: "$2b$12$4KBQqYo./uFnYZtskjDLaeUJA1YQ4VpRElwemP8VZcr0dumOYztf6"
           roles: # Optional
           - viewer
     mebafikadu706@gmail.com:
@@ -150,7 +150,7 @@ credentials:
           first_name: "Haregewyn" 
           last_name: "Fikadu"
           logged_in: False 
-          password: "ZV71A6y1uJQukVkI"
+          password: "$2b$12$cdV99LgZX.UOkWifus86u.Mkodi8u7QjA1nhjjHhYFyxb346BoRZW"
           roles: # Optional
           - viewer
     Kedirmifta3@gmail.com:
@@ -159,6 +159,6 @@ credentials:
           first_name: "Mifta" 
           last_name: "Kedir"
           logged_in: False 
-          password: "FXdc70pYVG0ayVTc"
+          password: "$2b$12$8pW6gFAcuDdbU.Rfm8PXouZ.6XM78AoNwttS9cq/sht9lHtAMYc/2"
           roles: # Optional
           - viewer

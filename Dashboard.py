@@ -20,6 +20,9 @@ from data_fetcher import (
     fetch_data_all_sales,
     fetch_data_all_cancellations,
     fetch_marketing_budgets,
+    fetch_low_order_restaurants,
+    fetch_restaurant_rating,
+    fetch_new_restaurant_info,
     fetch_All_delivered,
     fetch_restaurant_order_count_in_each_district,
     fetch_restaurant_payment,
@@ -36,16 +39,28 @@ current_user = st.session_state.get("username")  # or st.session_state.get("name
 # 2. Extract roles safely from config['credentials']['usernames']
 
 
-with open(CONFIG_PATH) as file:
+# 1. Load the configuration file
+with open('config.yaml') as file:
     config = yaml.load(file, Loader=SafeLoader)
 
-from numpy.random import default_rng as rng
+# 2. Initialize the authenticator
 authenticator = stauth.Authenticate(
     config['credentials'],
     config['cookie']['name'],
     config['cookie']['key'],
     config['cookie']['expiry_days'],
+    # config['preauthorized'],
+    auto_hash=False
 )
+
+# 3. Render the login widget
+try:
+    authenticator.login()
+except Exception as e:
+    st.error(e)
+
+# 4. Handle the authentication status
+
 
 user_roles = []
 if current_user and current_user in config.get("credentials", {}).get("usernames", {}):
@@ -194,17 +209,11 @@ def show_bar_table(df, group_col, value_col, title, show_rank=True):
         },
     )
 
-
-try:
-    authenticator.login()
-except Exception as e:
-    st.error(e)
-
-if st.session_state.get("authentication_status"):
-    authenticator.logout("Logout", "sidebar")
+if st.session_state["authentication_status"]:
+    authenticator.logout("Logout", "sidebar", key="unique_sidebar_logout_btn")
+    st.write(f'Welcome *{st.session_state["name"]}*')
     st.sidebar.write(f'Welcome *{st.session_state["name"]}*')
     categories = ["ALL Delivered", "All Sales", "All Cancellations","Common data"]
-
     # 4. Conditionally add 'Marketing Budget' if the user has 'marketing' or 'admin' role
     if "marketing" in roles or "admin" in roles:
         categories.append("Marketing Budget")
@@ -520,6 +529,9 @@ if st.session_state.get("authentication_status"):
             "Root File (Restaurants)",
             "Restaurant Sales Report",
             "Restaurant Daily order count report",
+            "Low Order Restaurant",
+            "Restaurant Rating",
+            "New Restaurants",
         ]
 
         
@@ -609,6 +621,62 @@ if st.session_state.get("authentication_status"):
                 file_name=f"restaurant_daily_order_count_{start_date}_{end_date}.csv",
                 mime="text/csv",
             )
+        elif selected_data == "Low Order Restaurant" and is_admin:
+            st.subheader("Low Order Restaurant")
+            first_month_date_range = st.date_input(
+                "Select comparison Date Range For second month",
+                value=(one_month_interval - timedelta(days=30), one_month_interval - timedelta(days=1)),
+                key="comparison_date_picker"  # <-- Add this unique key
+            )
+            second_month_date_range = st.date_input(
+                "Select Date Range For first month",
+                value=(one_month_interval, dt.date.today()),
+                key="low_order_date_picker"  # <-- Add this unique key
+            )
+
+            min_order = st.text_input("Enter minimum order count for filtering:", value="10")
+
+            if len(first_month_date_range) == 2 and len(second_month_date_range) == 2:
+                first_start_date, first_end_date = first_month_date_range
+                second_start_date, second_end_date = second_month_date_range
+
+                fetch_button = st.button("Fetch Low Order Restaurants")
+                if fetch_button:
+                    df = fetch_low_order_restaurants(
+                        first_start_date.strftime('%Y-%m-%d'),
+                        first_end_date.strftime('%Y-%m-%d'),
+                        second_start_date.strftime('%Y-%m-%d'),
+                        second_end_date.strftime('%Y-%m-%d'),
+                        first_start_date.strftime('%Y-%m-%d'),
+                        second_end_date.strftime('%Y-%m-%d'),
+                        min_order
+                    )
+                    st.dataframe(df)
+        elif selected_data == "Restaurant Rating" and is_admin:
+            st.subheader("Restaurant Rating")
+            date_range = st.date_input(
+                "Select Date Range",
+                value=(one_month_interval, dt.date.today()),
+                key="restaurant_rating_date_picker"  # <-- Add this unique key
+            )
+
+            if(len(date_range) == 2):
+                start_date, end_date = date_range
+                df = fetch_restaurant_rating(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+                st.dataframe(df)
+        elif selected_data == "New Restaurants" and is_admin:
+            st.subheader("New Restaurants")
+            date_range = st.date_input(
+                "Select Date Range",
+                value=(one_month_interval, dt.date.today()),
+                key="new_restaurant_date_picker"  # <-- Add this unique key
+            )
+
+            if len(date_range) == 2:
+                start_date, end_date = date_range
+                df = fetch_new_restaurant_info(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+                st.dataframe(df)
+        
             # Note: Added the date filter to food.deleted_at or similar if needed. 
             # If this query doesn't need date filtering, leave the WHERE clause as you provided it.
     
@@ -1412,8 +1480,8 @@ if st.session_state.get("authentication_status"):
     # Your logic here
     # ---- your other categories (Call Center, Area Manager, etc.) go here ----
 
-elif st.session_state.get("authentication_status") is False:
-    st.error("Username/password is incorrect")
-
-elif st.session_state.get("authentication_status") is None:
-    st.warning("Please enter your username and password")
+elif st.session_state["authentication_status"] is False:
+    st.error('Username/password is incorrect')
+    
+elif st.session_state["authentication_status"] is None:
+    st.warning('Please enter your username and password')

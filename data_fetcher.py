@@ -6,6 +6,8 @@ import pandas as pd
 from sqlalchemy import inspect, text
 from db_connection import create_db_engine
 
+import datetime as dt
+
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'delivered_data.csv')
 SALES_CSV_PATH = os.path.join(os.path.dirname(__file__), 'sales_data.csv')
 CANCELLATIONS_CSV_PATH = os.path.join(os.path.dirname(__file__), 'cancellations_data.csv')
@@ -633,6 +635,121 @@ and (
     )
   )
 group by o.restaurant_id,date(o.created_at);
+                """
+    with create_db_engine().connect() as connection:
+        chunks = pd.read_sql(query, connection,params=(start_date, end_date), chunksize=50000)
+        result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+        return result
+        
+def fetch_low_order_restaurants(first_month_start_date: str | None = None, 
+                                first_month_end_date: str | None = None, 
+                                second_month_start_date: str | None = None, 
+                                second_month_end_date: str | None = None,
+                                first_month_start_date_: str | None = None,
+                                second_month_end_date_: str | None = None, 
+                                below_order_count: int | None = 50):
+    
+    # 1. Generate column names
+    col_name_1 = dt.datetime.strptime(first_month_start_date, '%Y-%m-%d').strftime('%b_%d') + '_' + dt.datetime.strptime(first_month_end_date, '%Y-%m-%d').strftime('%b_%d')
+    col_name_2 = dt.datetime.strptime(second_month_start_date, '%Y-%m-%d').strftime('%b_%d') + '_' + dt.datetime.strptime(second_month_end_date, '%Y-%m-%d').strftime('%b_%d')
+
+    # 2. Use an f-string (f"") to inject the dynamic column names.
+    # 3. Use SQLAlchemy named parameters (e.g., :f_start) instead of %s.
+    # NOTE: Replace 'o.created_at' if your timestamp column is named differently!
+    query = text(f"""
+        WITH total_orders AS (
+            SELECT
+                res.name AS restaurant_name,
+                CONCAT(ad.f_name, ' ', ad.l_name) AS `BD_Name`,
+                COUNT(DISTINCT IF(o.created_at BETWEEN :f_start AND :f_end, o.id, NULL)) AS `{col_name_1}`,
+                COUNT(DISTINCT IF(o.created_at BETWEEN :s_start AND :s_end, o.id, NULL)) AS `{col_name_2}`,
+                res.status,
+                res.is_deleted
+            FROM orders o
+            JOIN restaurants res ON res.id = o.restaurant_id
+            JOIN admins ad ON ad.id = res.business_developer_id
+            WHERE o.created_at BETWEEN :global_start AND :global_end
+              AND o.order_status = 'delivered'
+            GROUP BY res.name, o.restaurant_id, `BD_Name`, res.status, res.is_deleted
+        )
+        SELECT *
+        FROM total_orders
+        WHERE `{col_name_1}` < :below_count
+    """)
+
+    # 4. Pass parameters as a dictionary
+    params_dict = {
+        "f_start": first_month_start_date,
+        "f_end": first_month_end_date,
+        "s_start": second_month_start_date,
+        "s_end": second_month_end_date,
+        "global_start": first_month_start_date_,
+        "global_end": second_month_end_date_,
+        "below_count": below_order_count
+    }
+
+    with create_db_engine().connect() as connection:
+        # Pass the dictionary to the params argument
+        chunks = pd.read_sql(query, connection, params=params_dict, chunksize=50000)
+        
+        # Concat the chunks generator into a single DataFrame
+        result = pd.concat(chunks, ignore_index=True)
+        return result
+    
+def fetch_restaurant_rating(start_date: str | None = None, end_date: str | None = None):
+    query = """
+             with rastaurant_rating AS (SELECT
+  res.id as id,
+  res.name,
+  count(if(r.rating=1,r.id,null)) AS `1 rating`,
+  count(if(r.rating=2,r.id,null)) AS `2 rating`,
+  count(if(r.rating=3,r.id,null)) AS `3 rating`,
+  count(if(r.rating=4,r.id,null)) AS `4 rating`,
+  count(if(r.rating=5,r.id,null)) AS `5 rating`,
+  avg(r.rating) as average_rating,
+  res.status
+FROM reviews r
+  join restaurants res on res.id=r.restaurant_id
+  join orders o on o.id=r.order_id
+where DATE(r.created_at) between %s and %s
+
+  group by res.id,res.name
+  order by `5 rating` desc)
+
+select
+  rr.*,
+  count(distinct o.id) as order_count,
+  sum(rfd.restaurant_fee) as restaurant_fee
+from orders o
+    join beu.restaurant_fee_details rfd on o.id = rfd.order_id
+  join rastaurant_rating rr on rr.id=o.restaurant_id
+where DATE(o.created_at) between %s and %s
+
+  and o.order_status='delivered'
+
+group by o.restaurant_id
+  order by rr.`5 rating` desc
+                """
+    with create_db_engine().connect() as connection:
+        chunks = pd.read_sql(query, connection,params=(start_date, end_date, start_date, end_date,), chunksize=50000)
+        result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+        return result
+    
+def fetch_new_restaurant_info(start_date: str | None = None, end_date: str | None = None):
+    query = """
+        select
+        r.id as restaurant_id,
+        r.name as restaurant_name,
+        count(distinct f.id) as item_count,
+        r.status as restaurant_status,
+        date(r.created_at) as restaurant_joined_date,
+        concat(a.f_name,' ',a.l_name) as BD_name
+        from restaurants r
+        join beu.food f on r.id = f.restaurant_id
+        join beu.admins a on r.business_developer_id = a.id
+        where  date(r.created_at) between %s and %s
+        and f.deleted_at is null
+        group by restaurant_id
                 """
     with create_db_engine().connect() as connection:
         chunks = pd.read_sql(query, connection,params=(start_date, end_date), chunksize=50000)

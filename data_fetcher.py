@@ -643,6 +643,7 @@ group by o.restaurant_id,date(o.created_at);
         
 def fetch_low_order_restaurants(first_month_start_date: str | None = None,first_month_end_date: str | None = None,second_month_start_date: str | None = None,second_month_end_date: str | None = None,first_month_start_date_: str | None = None,second_month_end_date_: str | None = None, below_order_count: int | None = 50):
     
+    
     # 1. Generate column names
     col_name_1 = dt.datetime.strptime(first_month_start_date, '%Y-%m-%d').strftime('%b_%d') + '_' + dt.datetime.strptime(first_month_end_date, '%Y-%m-%d').strftime('%b_%d')
     col_name_2 = dt.datetime.strptime(second_month_start_date, '%Y-%m-%d').strftime('%b_%d') + '_' + dt.datetime.strptime(second_month_end_date, '%Y-%m-%d').strftime('%b_%d')

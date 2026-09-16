@@ -1,2 +1,7 @@
 .streamlit/secrets.toml
 pass.py
+cancellations_data.csv
+cancellations_data.csv.csv
+delivered_data.csv
+delivered_data.csv.csv
+sales_data.csv

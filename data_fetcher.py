@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 from sqlalchemy import inspect, text
 from db_connection import create_db_engine
-
+import numpy as np
 import datetime as dt
 
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'delivered_data.csv')
@@ -748,5 +748,191 @@ def fetch_new_restaurant_info(start_date: str | None = None, end_date: str | Non
                 """
     with create_db_engine().connect() as connection:
         chunks = pd.read_sql(query, connection,params=(start_date, end_date), chunksize=50000)
+        result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+        return result
+def get_canceled_orders_data():
+   
+   query = """
+           select
+date (o.created_at) as date_,
+o.payment_method,
+count(distinct o.id) as order_count,
+count(distinct if(o.payment_status='refunded',o.id,null)) as refund_count
+    from orders o
+where o.created_at>=now() - interval 3 month
+and o.order_status='canceled' and restaurant_id not in (1329 , 999)
+group by date(o.created_at), o.payment_method ;
+                   """
+   
+   with create_db_engine().connect() as connection:
+      chunks = pd.read_sql(query, connection, chunksize=50000)
+      result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+      return result
+
+def get_cancellation_reasons_data( start_date: str | None = None, end_date: str | None = None):
+     
+     query = """
+                          select
+            ca.message as cancelation_reason,
+            count(distinct o.id) as order_count
+            from orders o
+                join cancellation_reasons ca on ca.id=o.cancelation_reason
+            where date(o.created_at) between %s and %s
+            and o.order_status='canceled' and restaurant_id not in (1329 , 999)
+            group by date(o.created_at), o.cancelation_reason 
+            order by order_count desc;
+
+                       """
+     with create_db_engine().connect() as connection:
+        chunks = pd.read_sql(query, connection, params=(start_date, end_date), chunksize=50000)
+        result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+        return result
+        
+    
+def get_failed_orders_data(start_date: str | None = None, end_date: str | None = None):
+    query = """
+                              WITH DailyUserStats AS (
+    SELECT
+        DATE(o.created_at) AS date_,
+        o.payment_method,
+        
+        -- 1. Count unique users who had at least one failed order (multiple fails count as 1)
+        COUNT(DISTINCT CASE WHEN o.order_status = 'failed' THEN o.user_id END) AS unique_failed_users,
+        
+        -- 2. Count unique users who had at least one successful order
+        COUNT(DISTINCT CASE WHEN o.order_status = 'delivered' THEN o.user_id END) AS unique_successful_users,
+        
+        -- 3. Total unique users who attempted any order (failed or successful)
+        COUNT(DISTINCT o.user_id) AS total_unique_users
+        
+    FROM orders o
+    WHERE DATE(o.created_at) BETWEEN %s AND %s
+      AND o.restaurant_id NOT IN (1329, 999)
+    GROUP BY 
+        DATE(o.created_at), 
+        o.payment_method
+)
+SELECT 
+    date_,
+    payment_method,
+    -- Calculate failure rate percentage (failed users / total users * 100)
+    ROUND((unique_failed_users * 100.0) / NULLIF(total_unique_users, 0), 2) AS failure_rate_percentage
+FROM DailyUserStats
+ORDER BY 
+    date_ DESC, 
+    payment_method;
+    
+                           """
+    with create_db_engine().connect() as connection:
+      chunks = pd.read_sql(query, connection, params=(start_date, end_date), chunksize=50000)
+      result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+      return result
+def fetch_restaurant_payment_data_anomali(start_date: str | None = None, end_date: str | None = None):
+    query = """
+        with Orders_info AS (
+select od.id                                                                                     as order_details_id,
+       o.id                                                                                      as order_id,
+       f.name                                                                                    as item_name,
+       r.name                                                                                    as restaurant_name,
+       od.price,
+       od.total_add_on_price,
+       o.edited,
+       o.adjusment,
+       od.quantity,
+       round(((od.price * od.quantity)+od.total_add_on_price),2) as total_amount,
+       od.restaurant_discount,
+       round((
+    ((od.price * od.quantity) + od.total_add_on_price)
+    - (((od.price * od.quantity) * od.rest_rest_discount) / 100)
+    - CASE
+        WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
+        ELSE (((od.price * od.quantity) * od.food_rest_discount) / 100)
+      END
+),2) AS price_after_res_discount, #### i need to consider this
+   round((  (((od.price * od.quantity) * od.rest_rest_discount) / 100)
+    + CASE
+        WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
+        ELSE (((od.price * od.quantity) * od.food_rest_discount) / 100)
+      END),2) as my_restaurant_discount,
+   round((
+  (
+    (
+  (
+    ((od.price * od.quantity) + od.total_add_on_price)
+    - (((od.price * od.quantity) * od.rest_rest_discount) / 100)
+    - CASE
+        WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
+        ELSE (((od.price * od.quantity) * od.food_rest_discount) / 100)
+      END
+)
+  ) * rfd.commission_percentage
+) / 100),2) AS commission_amount,
+
+       round((
+  (
+    ((od.price * od.quantity) + od.total_add_on_price)
+    - (((od.price * od.quantity) * od.rest_rest_discount) / 100)
+    - CASE
+        WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
+        ELSE (((od.price * od.quantity) * od.food_rest_discount) / 100)
+      END
+) - (
+  (
+    (
+      (
+        ((od.price * od.quantity) + od.total_add_on_price) - (
+          ((od.price * od.quantity) * od.rest_rest_discount) / 100
+        ) - CASE
+          WHEN od.food_discount_type = 'amount' THEN od.food_rest_discount * od.quantity
+          ELSE (
+            ((od.price * od.quantity) * od.food_rest_discount) / 100
+          )
+        END
+      )
+    ) * rfd.commission_percentage
+  ) / 100
+)
+),2) AS restaurant_fee
+from orders o
+         join beu.order_details od on o.id = od.order_id
+         join food f on od.food_id = f.id
+         join beu.restaurants r on o.restaurant_id = r.id
+         join restaurant_fee_details rfd on o.id = rfd.order_id
+where r.id not in (999, 1329)
+  and r.name not like 'Ethio-post%'
+  and r.name not like '%Donate%'
+  and date(o.created_at) between %s and %s
+#   and orders.created_at like '2026-05-24%'
+#   and o.restaurant_id in (501,558,1072,1310,1311,1312,1313,1314,1545,2122,2123,2242,3038)
+  and (
+    o.order_status = 'delivered'
+        or (
+        o.order_status = 'canceled' and (
+            o.cancelation_reason in ('R41', 'R42', 'R28')
+                or o.cancelation_reason like 'I%')
+        )
+    )
+)
+
+select
+    oi.order_id,
+    sum(oi.total_amount) as od_item_amount,
+    rfd.total_price,
+    sum(oi.price_after_res_discount) as od_price_after_res_discount,
+    sum(oi.commission_amount) as od_commission,
+    sum(oi.restaurant_fee) as od_restaurant_fee,
+    rfd.price_after_restaurant_discount,
+    rfd.commission_value,
+    rfd.restaurant_fee,
+    oi.adjusment as order_adjustment,
+    round((rfd.restaurant_fee - sum(oi.restaurant_fee)),2) as difference
+    from Orders_info oi
+    join restaurant_fee_details rfd on rfd.order_id=oi.order_id
+
+group by oi.order_id,rfd.restaurant_fee
+having ((od_restaurant_fee - rfd.restaurant_fee) > 1 or (od_restaurant_fee - rfd.restaurant_fee) < -1 );
+    """
+    with create_db_engine().connect() as connection:
+        chunks = pd.read_sql(query, connection, params=(start_date, end_date), chunksize=50000)
         result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
         return result

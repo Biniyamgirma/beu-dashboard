@@ -16,6 +16,10 @@ import altair as alt  # <--- Add this line here
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 from data_fetcher import (
     fetch_All_Canclation,
+    fetch_restaurant_payment_data_anomali,
+    get_canceled_orders_data,
+    get_cancellation_reasons_data,
+    get_failed_orders_data,
     fetch_data_all_delivered,
     fetch_data_all_sales,
     fetch_data_all_cancellations,
@@ -213,7 +217,7 @@ if st.session_state["authentication_status"]:
     authenticator.logout("Logout", "sidebar", key="unique_sidebar_logout_btn")
     st.write(f'Welcome *{st.session_state["name"]}*')
     st.sidebar.write(f'Welcome *{st.session_state["name"]}*')
-    categories = ["ALL Delivered", "All Sales", "All Cancellations","Common data"]
+    categories = ["ALL Delivered", "All Sales", "All Cancellations","Common data","Data Team"]
     # 4. Conditionally add 'Marketing Budget' if the user has 'marketing' or 'admin' role
     if "marketing" in roles or "admin" in roles:
         categories.append("Marketing Budget")
@@ -1479,6 +1483,78 @@ if st.session_state["authentication_status"]:
 
     # Your logic here
     # ---- your other categories (Call Center, Area Manager, etc.) go here ----
+    elif category == "Data Team":
+        st.set_page_config(page_title="Order Dashboard", layout="wide")
+        st.title("Order & Cancellation Dashboard")
+
+        st.markdown("---")
+
+        # 1. Cancellation Rate Graph
+        st.subheader("Daily Canceled Orders by Payment Method")
+        
+        df_canceled = get_canceled_orders_data()
+        # 1. (Optional but recommended) Ensure your date column is treated as a datetime object
+        df_canceled['date_'] = pd.to_datetime(df_canceled['date_'])
+
+        # 2. explicitly define the axes and color grouping
+        st.bar_chart(
+            df_canceled,
+            x="date_",              # The X-axis (Dates)
+            y="order_count",        # The Y-axis (Number of canceled orders)
+            color="payment_method"  # Groups the bars by payment method
+        )
+        # Note: You can change to st.line_chart(df_canceled) if you prefer a line graph for this metric.
+
+        # 2. Cancellation Reasons Table
+        st.subheader("Cancellation Reasons Count")
+        date_rangerange = st.date_input(
+                    "Select Date Range",
+                    value=(dt.date.today() - dt.timedelta(days=30), dt.date.today())
+                )
+        if len(date_rangerange) == 2:
+            start_date, end_date = date_rangerange
+            df_reasons = get_cancellation_reasons_data(start_date, end_date)
+            st.dataframe(df_reasons, use_container_width=True)
+
+        st.markdown("---")
+
+        # 3. Failed Order Alerts Graph
+        st.subheader("Failed Order Alerts by Payment Method")
+        date_rangerange_failed = st.date_input(
+                    "Select Date Range for Failed Orders",
+                    value=(dt.date.today() - dt.timedelta(days=30), dt.date.today()),
+                    key="failed_orders_date_range"
+                )
+        if len(date_rangerange_failed) == 2:
+            start_date_failed, end_date_failed = date_rangerange_failed
+            df_failed = get_failed_orders_data(start_date_failed, end_date_failed)
+            st.line_chart(df_failed, x="date_", y="failure_rate_percentage", color="payment_method")
+        
+
+        st.markdown("---")
+
+        # 4. Previous Errors
+        st.subheader("Previous Errors")
+
+        date_range = st.date_input(
+            "Select Date Range for Previous Errors",
+            value=(dt.date.today() - dt.timedelta(days=30), dt.date.today()),
+            key="previous_errors_date_range"
+        )
+
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+            df_payment_anomalies = fetch_restaurant_payment_data_anomali(start_date, end_date)
+
+            if len(df_payment_anomalies) > 0:
+                st.warning(f"Detected {len(df_payment_anomalies)} anomalies in the selected date range.")
+                st.dataframe(df_payment_anomalies, use_container_width=True)
+            else:
+                st.success("No anomalies detected in the selected date range.")
+        else:
+            st.success("No anomalies detected!")
+
+
 
 elif st.session_state["authentication_status"] is False:
     st.error('Username/password is incorrect')

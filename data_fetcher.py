@@ -899,17 +899,16 @@ from orders o
          join beu.restaurants r on o.restaurant_id = r.id
          join restaurant_fee_details rfd on o.id = rfd.order_id
 where r.id not in (999, 1329)
-  and r.name not like 'Ethio-post%'
-  and r.name not like '%Donate%'
+  and r.name not like 'Ethio-post%%'
+  and r.name not like '%%Donate%%'
   and date(o.created_at) between %s and %s
-#   and orders.created_at like '2026-05-24%'
-#   and o.restaurant_id in (501,558,1072,1310,1311,1312,1313,1314,1545,2122,2123,2242,3038)
+
   and (
     o.order_status = 'delivered'
         or (
         o.order_status = 'canceled' and (
             o.cancelation_reason in ('R41', 'R42', 'R28')
-                or o.cancelation_reason like 'I%')
+                or o.cancelation_reason like 'I%%')
         )
     )
 )
@@ -954,16 +953,15 @@ def fetch_data_inconsistencies_data_frame(start_date: str | None = None, end_dat
     left join cancellation_reasons ca on ca.id=orders.cancelation_reason
 where
   restaurants.id not in(999, 1329)
-  and restaurants.name not like 'Ethio-post%'
-  and restaurants.name not like '%Donate%'
+  and restaurants.name not like 'Ethio-post%%'
+  and restaurants.name not like '%%Donate%%'
   and date(orders.created_at) between %s and %s
-#   and orders.created_at like '2026-05-24%'
   and (
     orders.order_status = 'delivered'
     or (
       orders.order_status = 'canceled' and (
       orders.cancelation_reason in ('R41', 'R42', 'R28')
-      or orders.cancelation_reason like 'I%' )
+      or orders.cancelation_reason like 'I%%' )
     )
   ) and (orders.id not in (
       select
@@ -1000,8 +998,8 @@ def fetch_double_ordered_orders(start_date: str | None = None, end_date: str | N
     left join cancellation_reasons ca on ca.id=orders.cancelation_reason
 where
   restaurants.id not in(999, 1329)
-  and restaurants.name not like 'Ethio-post%'
-  and restaurants.name not like '%Donate%'
+  and restaurants.name not like 'Ethio-post%%'
+  and restaurants.name not like '%%Donate%%'
   and date(orders.created_at) between %s and %s
    and timestampdiff(second ,orders.placed_at,orders.confirmed)/60 >300;
                            """

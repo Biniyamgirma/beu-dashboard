@@ -936,3 +936,76 @@ having ((od_restaurant_fee - rfd.restaurant_fee) > 1 or (od_restaurant_fee - rfd
         chunks = pd.read_sql(query, connection, params=(start_date, end_date), chunksize=50000)
         result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
         return result
+def fetch_data_inconsistencies_data_frame(start_date: str | None = None, end_date: str | None = None):
+    query = """
+     select
+    orders.id,
+    orders.created_at,
+    orders.canceled,
+    orders.handover,
+    orders.picked_up,
+    orders.order_amount,
+    orders.payment_method,
+    orders.order_status,
+    orders.payment_status,
+    ca.message as canclation_reason
+    from orders
+    join restaurants on orders.restaurant_id = restaurants.id
+    left join cancellation_reasons ca on ca.id=orders.cancelation_reason
+where
+  restaurants.id not in(999, 1329)
+  and restaurants.name not like 'Ethio-post%'
+  and restaurants.name not like '%Donate%'
+  and date(orders.created_at) between %s and %s
+#   and orders.created_at like '2026-05-24%'
+  and (
+    orders.order_status = 'delivered'
+    or (
+      orders.order_status = 'canceled' and (
+      orders.cancelation_reason in ('R41', 'R42', 'R28')
+      or orders.cancelation_reason like 'I%' )
+    )
+  ) and (orders.id not in (
+      select
+          order_id
+          from restaurant_fee_details
+
+    ) or orders.id not in (
+        select
+            order_id
+            from order_statistics
+
+    ))
+                           """
+    with create_db_engine().connect() as connection:
+      chunks = pd.read_sql(query, connection, params=(start_date, end_date), chunksize=50000)
+      result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+      return result
+
+def fetch_double_ordered_orders(start_date: str | None = None, end_date: str | None = None):
+    query = """
+    select
+    orders.id,
+    orders.created_at,
+    orders.canceled,
+    orders.handover,
+    orders.picked_up,
+    orders.order_amount,
+    orders.payment_method,
+    orders.order_status,
+    orders.payment_status,
+    ca.message as canclation_reason
+    from orders
+    join restaurants on orders.restaurant_id = restaurants.id
+    left join cancellation_reasons ca on ca.id=orders.cancelation_reason
+where
+  restaurants.id not in(999, 1329)
+  and restaurants.name not like 'Ethio-post%'
+  and restaurants.name not like '%Donate%'
+  and date(orders.created_at) between %s and %s
+   and timestampdiff(second ,orders.placed_at,orders.confirmed)/60 >300;
+                           """
+    with create_db_engine().connect() as connection:
+      chunks = pd.read_sql(query, connection, params=(start_date, end_date), chunksize=50000)
+      result = pd.concat(chunks, ignore_index=True) if chunks is not None else pd.DataFrame()
+      return result

@@ -16,6 +16,8 @@ import altair as alt  # <--- Add this line here
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 from data_fetcher import (
     fetch_All_Canclation,
+    fetch_data_inconsistencies_data_frame,
+    fetch_double_ordered_orders,
     fetch_restaurant_payment_data_anomali,
     get_canceled_orders_data,
     get_cancellation_reasons_data,
@@ -1545,10 +1547,19 @@ if st.session_state["authentication_status"]:
         if len(date_range) == 2:
             start_date, end_date = date_range
             df_payment_anomalies = fetch_restaurant_payment_data_anomali(start_date, end_date)
-
+            df_data_anomalies = fetch_data_inconsistencies_data_frame(start_date, end_date)
+            df_double_ordered_orders = fetch_double_ordered_orders(start_date, end_date)
             if len(df_payment_anomalies) > 0:
-                st.warning(f"Detected {len(df_payment_anomalies)} anomalies in the selected date range.")
+
+                st.warning(f"Detected payment anomalies: {len(df_payment_anomalies)} in the selected date range.")
                 st.dataframe(df_payment_anomalies, use_container_width=True)
+            elif len(df_data_anomalies) > 0:
+
+                st.warning(f"Detected data inconsistencies: {len(df_data_anomalies)} in the selected date range.")
+                st.dataframe(df_data_anomalies, use_container_width=True)
+            elif len(df_double_ordered_orders)>0:
+                st.warning(f"Detected double ordered orders: {len(df_double_ordered_orders)} in the selected date range.")
+                st.dataframe(df_double_ordered_orders, use_container_width=True)
             else:
                 st.success("No anomalies detected in the selected date range.")
         else:

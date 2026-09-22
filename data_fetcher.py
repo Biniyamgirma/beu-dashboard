@@ -498,7 +498,7 @@ def fetch_root_file():
         query = """
                 SELECT
                     r.id, r.name as res_name, r.status, r.is_deleted, r.comission, r.service_charge,
-                    r.upFrontPayment, r.phone, r.optional_phone_numbers, CAST(r.opening_time AS CHAR), CAST(r.closeing_time AS CHAR),
+                    r.upFrontPayment, r.phone, r.optional_phone_numbers, CAST(r.opening_time AS CHAR) as opening_time, CAST(r.closeing_time AS CHAR) as closeing_time,
                     r.break_start_time, r.break_end_time, r.off_day, r.free_delivery, r.address,
                     categories.name as categorie_name, CONCAT(admins.f_name, ' ', admins.l_name) AS `BD NAME`,
                     CASE

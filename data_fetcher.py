@@ -515,7 +515,7 @@ def fetch_root_file():
                 LEFT JOIN delivery_zones dz ON dz.id = r.z_id
                 LEFT JOIN categories ON categories.id = r.category_id
                 WHERE r.is_deleted != 1
-                AND r.name not like 'Ethio-post%'
+                AND r.name not like 'Ethio-post%%'
                 AND food.deleted_at IS NULL
                 GROUP BY r.id;
                 """

@@ -68,14 +68,14 @@ def fetch_data_all_sales(start_date: str | None = None,end_date: str | None = No
               orders.order_status = 'canceled'
               AND (
                 orders.cancelation_reason IN ('R41', 'R42', 'R28')
-                OR orders.cancelation_reason LIKE 'I%'
+                OR orders.cancelation_reason LIKE 'I%%'
               )
             )
           )
           AND orders.created_at >= :start_date
           AND orders.created_at < :end_date
           AND restaurants.id NOT IN (999, 1329)
-          AND restaurants.name NOT LIKE 'Ethio-post%'
+          AND restaurants.name NOT LIKE 'Ethio-post%%'
         GROUP BY
           order_details.id
         ORDER BY

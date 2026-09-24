@@ -591,8 +591,8 @@ from orders o
          join beu.restaurants r on o.restaurant_id = r.id
          join restaurant_fee_details rfd on o.id = rfd.order_id
 where r.id not in (999, 1329)
-  and r.name not like 'Ethio-post%'
-  and r.name not like '%Donate%'
+  and r.name not like 'Ethio-post%%'
+  and r.name not like '%%Donate%%'
   and date(o.created_at) between %s and %s
 
  

@@ -527,6 +527,7 @@ def fetch_restaurant_payment(start_date: str | None = None, end_date: str | None
     query = """
                select od.id                                                                                     as order_details_id,
        o.id                                                                                      as order_id,
+       date(o.placed_at)                                                                                as order_date,
        f.name                                                                                    as item_name,
        r.name                                                                                    as restaurant_name,
        od.price,

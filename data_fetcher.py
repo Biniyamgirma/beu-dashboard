@@ -41,14 +41,14 @@ def fetch_data_all_sales(start_date: str | None = None,end_date: str | None = No
           CASE
             WHEN admins.f_name IN (
                 'Yohannes',
-                'Abreham',
-                'Rekik',
-                'Yeabtsega'
+                'Abel',
+                'Chernet',
+                'Dawit'
               ) THEN 'Team 1'
             WHEN admins.f_name IN (
                 'Mifta',
-                'Abel',
-                'Chernet',
+                'Sofonias',
+                'Rekik',
                 'Haregewyn'
               ) THEN 'Team 2'
             ELSE 'NO TEAM'
@@ -120,17 +120,17 @@ def fetch_data_all_cancellations(start_date: str | None = None, end_date: str | 
           CONCAT(admins.f_name, ' ', admins.l_name) AS BD,
           CASE
               WHEN admins.f_name IN (
-                  'Yohannes',
-                  'Abreham',
-                  'Rekik',
-                  'Yeabtsega'
-                ) THEN 'Team 1'
-              WHEN admins.f_name IN (
-                  'Mifta',
-                  'Abel',
-                  'Chernet',
-                  'Haregewyn'
-                ) THEN 'Team 2'
+                'Yohannes',
+                'Abel',
+                'Chernet',
+                'Dawit'
+              ) THEN 'Team 1'
+            WHEN admins.f_name IN (
+                'Mifta',
+                'Sofonias',
+                'Rekik',
+                'Haregewyn'
+              ) THEN 'Team 2'
               ELSE 'NO TEAM'
             END AS Team,
           (TIMESTAMPDIFF(SECOND, orders.placed_at, orders.canceled) / 60) AS cancel_time,
@@ -215,17 +215,17 @@ def fetch_data_all_delivered(start_date: str | None = None, end_date: str | None
               CONCAT(admins.f_name, ' ', admins.l_name) AS `BD NAME`,
               CASE
                 WHEN admins.f_name IN (
-                    'Yohannes',
-                    'Abreham',
-                    'Rekik',
-                    'Yeabtsega'
-                  ) THEN 'Team 1'
-                WHEN admins.f_name IN (
-                    'Mifta',
-                    'Abel',
-                    'Chernet',
-                    'Haregewyn'
-                  ) THEN 'Team 2'
+                'Yohannes',
+                'Abel',
+                'Chernet',
+                'Dawit'
+              ) THEN 'Team 1'
+            WHEN admins.f_name IN (
+                'Mifta',
+                'Sofonias',
+                'Rekik',
+                'Haregewyn'
+              ) THEN 'Team 2'
                 ELSE 'NO TEAM'
               END AS Team,
               COALESCE(GROUP_CONCAT(DISTINCT menu_items.name ORDER BY menu_items.name SEPARATOR ', '), '') AS item_names
@@ -275,18 +275,17 @@ def fetch_data_all_delivered(start_date: str | None = None, end_date: str | None
               CONCAT(admins.f_name, ' ', admins.l_name) AS `BD NAME`,
               CASE
                 WHEN admins.f_name IN (
-                    'Yohannes',
-                    'Abreham',
-                    'Rekik',
-                    'Yeabtsega'
-                  ) THEN 'Team 1'
-                WHEN admins.f_name IN (
-                    'Mifta',
-                    'Abel',
-                    'Chernet',
-                    'Haregewyn'
-                  ) THEN 'Team 2'
-                ELSE 'NO TEAM'
+                'Yohannes',
+                'Abel',
+                'Chernet',
+                'Dawit'
+              ) THEN 'Team 1'
+            WHEN admins.f_name IN (
+                'Mifta',
+                'Sofonias',
+                'Rekik',
+                'Haregewyn'
+              ) THEN 'Team 2'
               END AS Team,
               '' AS item_names
             FROM
@@ -440,8 +439,18 @@ def fetch_All_delivered(start_date: str | None = None, end_date: str | None = No
                         orders.delivery_address ->> '$.address' AS customer_addresses,
                         dz.name AS restaurant_district, CONCAT(admins.f_name, ' ', admins.l_name) AS `BD NAME`,
                         CASE
-                            WHEN admins.f_name IN ('Yohannes', 'Abreham', 'Rekik', 'Yeabtsega') THEN 'Team 1'
-                            WHEN admins.f_name IN ('Mifta', 'Abel', 'Cherenet', 'Haregewyn') THEN 'Team 2'
+                            WHEN admins.f_name IN (
+                                'Yohannes',
+                                'Abel',
+                                'Chernet',
+                                'Dawit'
+                              ) THEN 'Team 1'
+                            WHEN admins.f_name IN (
+                                'Mifta',
+                                'Sofonias',
+                                'Rekik',
+                                'Haregewyn'
+                              ) THEN 'Team 2'
                             ELSE 'NO TEAM'
                         END AS Team
                     FROM orders
@@ -475,8 +484,18 @@ def fetch_All_Canclation(start_date: str | None = None, end_date: str | None = N
                     orders.delivery_address ->> '$.address' AS customer_addresses,
                     dz.name AS restaurant_district, CONCAT(admins.f_name, ' ', admins.l_name) AS `BD NAME`,
                     CASE
-                        WHEN admins.f_name IN ('Yohannes', 'Abreham', 'Rekik', 'Yeabtsega') THEN 'Team 1'
-                        WHEN admins.f_name IN ('Mifta', 'Abel', 'Cherenet', 'Haregewyn') THEN 'Team 2'
+                        WHEN admins.f_name IN (
+                            'Yohannes',
+                            'Abel',
+                            'Chernet',
+                            'Dawit'
+                          ) THEN 'Team 1'
+                        WHEN admins.f_name IN (
+                            'Mifta',
+                            'Sofonias',
+                            'Rekik',
+                            'Haregewyn'
+                          ) THEN 'Team 2'
                         ELSE 'NO TEAM'
                     END AS Team
                 FROM orders
@@ -502,8 +521,18 @@ def fetch_root_file():
                     r.break_start_time, r.break_end_time, r.off_day, r.free_delivery, r.address,
                     categories.name as categorie_name, CONCAT(admins.f_name, ' ', admins.l_name) AS `BD NAME`,
                     CASE
-                        WHEN admins.f_name IN ('Yohannes', 'Abreham', 'Rekik', 'Yeabtsega') THEN 'Team 1'
-                        WHEN admins.f_name IN ('Mifta', 'Abel', 'Cherenet', 'Haregewyn') THEN 'Team 2'
+                       WHEN admins.f_name IN (
+                            'Yohannes',
+                            'Abel',
+                            'Chernet',
+                            'Dawit'
+                          ) THEN 'Team 1'
+                        WHEN admins.f_name IN (
+                            'Mifta',
+                            'Sofonias',
+                            'Rekik',
+                            'Haregewyn'
+                          ) THEN 'Team 2'
                         ELSE 'NO TEAM'
                     END AS Team,
                     dz.name as District,

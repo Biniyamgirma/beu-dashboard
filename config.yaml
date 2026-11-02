@@ -112,8 +112,8 @@ credentials:
     sofoniashabteab8@gmail.com:
           email: sofoniashabteab8@gmail.com
           failed_login_attempts: 0 # Will be managed automatically
-          first_name: "Abreham"  
-          last_name: "Sileshi"
+          first_name: "Sofonias"  
+          last_name: "Habteab"
           logged_in: False 
           password: "$2b$12$jee3xKO2TCCR4XwdT86sF.7EKIoMtaV4bj3xvp7UID44xVi0at4cy"
           roles: # Optional

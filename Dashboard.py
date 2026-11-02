@@ -215,7 +215,7 @@ def show_bar_table(df, group_col, value_col, title, show_rank=True):
         },
     )
 
-if st.session_state["authentication_status"]:
+if st.authentication_status["authentication_status"]:
     authenticator.logout("Logout", "sidebar", key="unique_sidebar_logout_btn")
     st.write(f'Welcome *{st.session_state["name"]}*')
     st.sidebar.write(f'Welcome *{st.session_state["name"]}*')

@@ -81,15 +81,6 @@ credentials:
           - admin
           - editor
           - viewer
-    test@gmail.com:
-          email: test.com
-          failed_login_attempts: 0 # Will be managed automatically
-          first_name: Abreham 
-          last_name: Sileshi
-          logged_in: False 
-          password: "$2b$12$9QDQ6oOyE2nMKodTpVTY7e8pNycfFqCKHWEEt1PkmdMiCcoWfEv2O"
-          roles: # Optional
-          - viewer
     abelwasihun4@gmail.com:
           email: abelwasihun4@gmail.com
           failed_login_attempts: 0 # Will be managed automatically
@@ -108,15 +99,7 @@ credentials:
           password: "$2b$12$SeNjoIfReq//nJ5EapV3CeNbsJuCiC2Qwjp1n8a8Z3WNCaqjynE9."
           roles: # Optional
           - viewer
-    Yeabtsegaayele81@gmail.com:
-          email: Yeabtsegaayele81@gmail.com
-          failed_login_attempts: 0 # Will be managed automatically
-          first_name: "Yeabtsega" 
-          last_name: "Ayele"
-          logged_in: False 
-          password: "$2b$12$j3HzSoTAiGvb1bZnHD.AnOMqFo1hD0I20CM55dDAaj4UjI1JJLtsC"
-          roles: # Optional
-          - viewer
+
     yohannesgirmay6@gmail.com:
           email: yohannesgirmay6@gmail.com
           failed_login_attempts: 0 # Will be managed automatically
@@ -126,13 +109,13 @@ credentials:
           password: "$2b$12$/HUWxje70LozCVzdLWZT0.5AzC8gjN9bejL/IX4kSXKX72fQk8KRq"
           roles: # Optional
           - viewer
-    abrehamsileshi6@gmail.com:
-          email: abrehamsileshi6@gmail.com
+    sofoniashabteab8@gmail.com:
+          email: sofoniashabteab8@gmail.com
           failed_login_attempts: 0 # Will be managed automatically
           first_name: "Abreham"  
           last_name: "Sileshi"
           logged_in: False 
-          password: "$2b$12$YdxS/bNh977lGyHvJML5aeCBUZI7XuA24LdPedTyXXnbvw0178w/6"
+          password: "$2b$12$jee3xKO2TCCR4XwdT86sF.7EKIoMtaV4bj3xvp7UID44xVi0at4cy"
           roles: # Optional
           - viewer
     cherenetsolomon70@gmail.com:
@@ -151,6 +134,15 @@ credentials:
           last_name: "Fikadu"
           logged_in: False 
           password: "$2b$12$cdV99LgZX.UOkWifus86u.Mkodi8u7QjA1nhjjHhYFyxb346BoRZW"
+          roles: # Optional
+          - viewer
+    Kedirmifta3@gmail.com:
+          email: Kedirmifta3@gmail.com
+          failed_login_attempts: 0 # Will be managed automatically
+          first_name: "Mifta" 
+          last_name: "Kedir"
+          logged_in: False 
+          password: "$2b$12$8pW6gFAcuDdbU.Rfm8PXouZ.6XM78AoNwttS9cq/sht9lHtAMYc/2"
           roles: # Optional
           - viewer
     Kedirmifta3@gmail.com:
